@@ -3,6 +3,7 @@ import { asyncHandler } from "../../shared/utils/asyncHandler";
 import { ApiResponse } from "../../shared/utils/ApiResponse";
 import User from "../user/User.schema";
 import Product from "../product/Product.schema";
+import { EMedicine } from "../epharmacy/models";
 import Order from "../order/Order.schema";
 import Doctor from "../doctor/Doctor.schema";
 import Consultancy from "../consultancy/Consultancy.schema";

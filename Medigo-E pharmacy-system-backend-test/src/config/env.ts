@@ -10,6 +10,9 @@ const requiredEnvVars = [
   "JWT_SECRET",
   "JWT_REFRESH_SECRET",
   "CLIENT_URL",
+  "CLOUDINARY_CLOUD_NAME",
+  "CLOUDINARY_API_KEY",
+  "CLOUDINARY_API_SECRET",
 ] as const;
 
 const missingVars = requiredEnvVars.filter((key) => !process.env[key]);
@@ -46,6 +49,11 @@ const env = {
   SMTP_PORT: Number(process.env.SMTP_PORT) || 587,
   SMTP_USER: process.env.SMTP_USER || "",
   SMTP_PASS: process.env.SMTP_PASS || "",
+
+  // Cloudinary
+  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME!,
+  CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY!,
+  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET!,
 
   // helpers
   isDev:  process.env.NODE_ENV !== "production",

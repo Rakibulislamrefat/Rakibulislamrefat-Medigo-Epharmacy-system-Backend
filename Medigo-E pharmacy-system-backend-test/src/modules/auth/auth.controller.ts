@@ -1,6 +1,4 @@
 import { Request, Response } from "express";
-import { v2 as cloudinary }  from "cloudinary";
-import fs                    from "fs/promises";
 import { AuthService }       from "./auth.service";
 import { asyncHandler }      from "../../shared/utils/asyncHandler";
 import { ApiResponse }       from "../../shared/utils/ApiResponse";
@@ -58,51 +56,30 @@ const logUserActivity = async (
 //  Upload avatar to Cloudinary (multer middleware required)
 // ══════════════════════════════════════════════════════
 export const uploadAvatar = asyncHandler(async (req: Request, res: Response) => {
-  const file = (req as any).file as Express.Multer.File | undefined;
+  const file = (req as any).file;
 
   if (!file) {
     throw new ApiError(400, "No avatar file uploaded");
   }
 
-  const filePath = file.path;
+  // When using CloudinaryStorage in multer, file.path (or file.secure_url) is the Cloudinary URL.
+  const avatarUrl = file.path || file.secure_url;
 
-  try {
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-    const apiKey = process.env.CLOUDINARY_API_KEY;
-    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  res
+    .status(201)
+    .json(
+      new ApiResponse(201, "Avatar uploaded successfully", {
+        avatarUrl,
+      })
+    );
 
-    if (!cloudName || !apiKey || !apiSecret) {
-      throw new ApiError(500, "Cloudinary is not configured");
-    }
-
-    cloudinary.config({
-      cloud_name: cloudName,
-      api_key: apiKey,
-      api_secret: apiSecret,
+  if (req.user?.id) {
+    await logUserActivity(req, req.user.id, "avatar_upload", {
+      action: "upload_avatar",
     });
-
-    const result = await cloudinary.uploader.upload(filePath, {
-      folder: "bloodConnect/avatars",
-      resource_type: "image",
-    });
-
-    res
-      .status(201)
-      .json(
-        new ApiResponse(201, "Avatar uploaded successfully", {
-          avatarUrl: result.secure_url,
-        })
-      );
-
-    if (req.user?.id) {
-      await logUserActivity(req, req.user.id, "avatar_upload", {
-        action: "upload_avatar",
-      });
-    }
-  } finally {
-    await fs.unlink(filePath).catch(() => {});
   }
 });
+
 
 // ══════════════════════════════════════════════════════
 //  POST /api/auth/register

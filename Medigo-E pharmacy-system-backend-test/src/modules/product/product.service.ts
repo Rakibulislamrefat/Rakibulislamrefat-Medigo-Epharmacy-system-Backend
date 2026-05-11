@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Product from "./Product.schema";
 import { ApiError, paginate } from "../../shared/utils";
+import { deleteFromCloudinary, getPublicIdFromUrl } from "../../middleware/upload.middleware";
 
 const isValidId = (id: string) => mongoose.Types.ObjectId.isValid(id);
 
@@ -54,6 +55,22 @@ export class ProductService {
 
   static async update(id: string, payload: any) {
     if (!isValidId(id)) throw new ApiError(400, "Invalid product id");
+
+    // If new images are provided, delete old ones
+    if (payload.images && payload.images.length > 0) {
+      const existingProduct = await Product.findById(id);
+      if (existingProduct && existingProduct.images && existingProduct.images.length > 0) {
+        for (const imageUrl of existingProduct.images) {
+          try {
+            const publicId = getPublicIdFromUrl(imageUrl);
+            await deleteFromCloudinary(publicId);
+          } catch (error) {
+            console.error(`Failed to delete old image ${imageUrl} from Cloudinary:`, error);
+          }
+        }
+      }
+    }
+
     const updated = await Product.findByIdAndUpdate(id, payload, { new: true });
     if (!updated) throw new ApiError(404, "Product not found");
     return updated;
@@ -61,8 +78,25 @@ export class ProductService {
 
   static async remove(id: string) {
     if (!isValidId(id)) throw new ApiError(400, "Invalid product id");
+
+    // Get the product to access images
+    const product = await Product.findById(id);
+    if (!product) throw new ApiError(404, "Product not found");
+
+    // Delete images from Cloudinary
+    if (product.images && product.images.length > 0) {
+      for (const imageUrl of product.images) {
+        try {
+          const publicId = getPublicIdFromUrl(imageUrl);
+          await deleteFromCloudinary(publicId);
+        } catch (error) {
+          console.error(`Failed to delete image ${imageUrl} from Cloudinary:`, error);
+          // Continue with product deletion even if image deletion fails
+        }
+      }
+    }
+
     const removed = await Product.findByIdAndDelete(id);
-    if (!removed) throw new ApiError(404, "Product not found");
     return removed;
   }
 
