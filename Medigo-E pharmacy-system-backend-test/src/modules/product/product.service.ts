@@ -5,8 +5,74 @@ import { deleteFromCloudinary, getPublicIdFromUrl } from "../../middleware/uploa
 
 const isValidId = (id: string) => mongoose.Types.ObjectId.isValid(id);
 
+const slugify = (value: string) =>
+  value
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const toNumber = (value: unknown, fallback?: number | null) => {
+  if (value === "" || value == null) return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : value;
+};
+
+const toBoolean = (value: unknown) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (value.toLowerCase() === "true") return true;
+    if (value.toLowerCase() === "false") return false;
+  }
+  return value;
+};
+
+const toStringArray = (value: unknown) => {
+  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
+  if (typeof value !== "string") return value;
+
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed.map(String).map((item) => item.trim()).filter(Boolean);
+    }
+  } catch {
+    // Fall back to comma-separated form data values.
+  }
+
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const normalizeProductPayload = (payload: any = {}) => {
+  const normalized = { ...payload };
+
+  delete normalized.image;
+
+  if (!normalized.slug && normalized.name) normalized.slug = slugify(normalized.name);
+  if (normalized.slug) normalized.slug = slugify(normalized.slug);
+
+  if ("price" in normalized) normalized.price = toNumber(normalized.price);
+  if ("salePrice" in normalized) normalized.salePrice = toNumber(normalized.salePrice, null);
+  if ("stockQty" in normalized) normalized.stockQty = toNumber(normalized.stockQty);
+  if ("otc" in normalized) normalized.otc = toBoolean(normalized.otc);
+  if ("requiresPrescription" in normalized) {
+    normalized.requiresPrescription = toBoolean(normalized.requiresPrescription);
+  }
+
+  for (const field of ["categories", "tags", "indications", "warnings"]) {
+    if (normalized[field] != null) normalized[field] = toStringArray(normalized[field]);
+  }
+
+  return normalized;
+};
+
 export class ProductService {
   static async create(payload: any) {
+    payload = normalizeProductPayload(payload);
     const { name, slug, price } = payload || {};
     if (!name) throw new ApiError(400, "name is required");
     if (!slug) throw new ApiError(400, "slug is required");
@@ -55,6 +121,7 @@ export class ProductService {
 
   static async update(id: string, payload: any) {
     if (!isValidId(id)) throw new ApiError(400, "Invalid product id");
+    payload = normalizeProductPayload(payload);
 
     // If new images are provided, delete old ones
     if (payload.images && payload.images.length > 0) {
@@ -146,4 +213,3 @@ export class ProductService {
     return result;
   }
 }
-

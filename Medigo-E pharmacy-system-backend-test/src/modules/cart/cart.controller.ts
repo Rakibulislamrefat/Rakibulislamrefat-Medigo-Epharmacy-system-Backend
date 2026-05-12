@@ -16,6 +16,17 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
   res.status(200).json(new ApiResponse(200, "Cart updated", data));
 });
 
+export const addProductToCart = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) throw new ApiError(401, "Not authenticated");
+
+  const productId = req.params.productId || req.body.productId || req.body.product;
+  const qty = Number(req.body.qty || 1);
+  const data = await CartService.addProduct(userId, productId, qty);
+
+  res.status(200).json(new ApiResponse(200, "Product added to cart", data));
+});
+
 export const updateCartItem = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.id;
   if (!userId) throw new ApiError(401, "Not authenticated");
@@ -36,4 +47,3 @@ export const clearCart = asyncHandler(async (req: Request, res: Response) => {
   const data = await CartService.clear(userId);
   res.status(200).json(new ApiResponse(200, "Cart cleared", data));
 });
-

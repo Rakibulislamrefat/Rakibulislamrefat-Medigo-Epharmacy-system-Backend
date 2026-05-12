@@ -16,28 +16,39 @@ export class CartService {
 
   static async addItem(userId: string, payload: any) {
     if (!isValidId(userId)) throw new ApiError(400, "Invalid user id");
-    const productId = payload?.product || payload?.medicine;
+    const productId = payload?.product || payload?.productId || payload?.medicine;
     const qty = Number(payload?.qty || 1);
+    return this.addProduct(userId, String(productId || ""), qty);
+  }
+
+  static async addProduct(userId: string, productId: string, qty = 1) {
+    if (!isValidId(userId)) throw new ApiError(400, "Invalid user id");
     if (!productId) throw new ApiError(400, "product is required");
     if (!isValidId(String(productId))) throw new ApiError(400, "Invalid product id");
     if (!Number.isFinite(qty) || qty < 1) throw new ApiError(400, "qty must be >= 1");
 
     const product: any = await Product.findById(productId).select("status stockQty name");
     if (!product || product.status !== "active") throw new ApiError(404, "Product not found");
-    if (Number(product.stockQty) < qty) throw new ApiError(400, `Insufficient stock for ${product.name}`);
 
     const cart: any = await Cart.findOne({ user: userId });
     const next = cart || (await Cart.create({ user: userId, items: [] }));
     const idx = next.items.findIndex((i: any) => String(i.product) === String(productId));
-    if (idx >= 0) next.items[idx].qty += qty;
-    else next.items.push({ product: productId, qty });
+    const existingQty = idx >= 0 ? Number(next.items[idx].qty) : 0;
+    const nextQty = existingQty + qty;
+
+    if (Number(product.stockQty) < nextQty) {
+      throw new ApiError(400, `Insufficient stock for ${product.name}`);
+    }
+
+    if (idx >= 0) next.items[idx].qty = nextQty;
+    else next.items.push({ product: productId, qty: nextQty });
     await next.save();
     return Cart.findById(next._id).populate("items.product");
   }
 
   static async updateItem(userId: string, payload: any) {
     if (!isValidId(userId)) throw new ApiError(400, "Invalid user id");
-    const productId = payload?.product || payload?.medicine;
+    const productId = payload?.product || payload?.productId || payload?.medicine;
     const qty = Number(payload?.qty);
     if (!productId) throw new ApiError(400, "product is required");
     if (!isValidId(String(productId))) throw new ApiError(400, "Invalid product id");
@@ -71,4 +82,3 @@ export class CartService {
     return Cart.findById(cart._id).populate("items.product");
   }
 }
-

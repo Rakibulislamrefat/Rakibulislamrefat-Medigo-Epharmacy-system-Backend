@@ -7,6 +7,13 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
   res.status(200).json(new ApiResponse(200, "User fetched", data));
 });
 
+export const getMyProfile = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) throw new ApiError(401, "Not authenticated");
+  const data = await UserService.getPublicProfile(userId);
+  res.status(200).json(new ApiResponse(200, "Profile fetched", data));
+});
+
 export const getAllUsers = asyncHandler(async (req: Request, res: Response) => {
   const data = await UserService.listUsers(req.query);
   res.status(200).json(new ApiResponse(200, "Users fetched", data));
@@ -23,9 +30,14 @@ export const updateAvatar = asyncHandler(async (req: Request, res: Response) => 
   if (!userId) throw new ApiError(401, "Not authenticated");
   const file = (req as any).file as Express.Multer.File | undefined;
   if (!file) throw new ApiError(400, "No file uploaded");
-  const avatarUrl = `/uploads/${file.filename}`;
+  
+  // Extract URL from Cloudinary response
+  // multer-storage-cloudinary provides the URL in file.path or file.secure_url
+  const avatarUrl = file.path || (file as any).secure_url || file.filename;
+  if (!avatarUrl) throw new ApiError(500, "Failed to get image URL from upload service");
+  
   const data = await UserService.updateAvatar(userId, avatarUrl);
-  res.status(200).json(new ApiResponse(200, "Avatar updated", data));
+  res.status(200).json(new ApiResponse(200, "Profile picture updated successfully", data));
 });
 
 export const promoteToAdmin = asyncHandler(async (req: Request, res: Response) => {

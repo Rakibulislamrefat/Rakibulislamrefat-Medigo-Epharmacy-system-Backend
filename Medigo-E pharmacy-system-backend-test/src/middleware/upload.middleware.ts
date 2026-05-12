@@ -1,7 +1,7 @@
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import * as multerStorageCloudinary from "multer-storage-cloudinary";
-import { Request } from "express";
+import { NextFunction, Request, Response } from "express";
 import { ApiError } from "../shared/utils";
 import env from "../config/env";
 
@@ -20,7 +20,7 @@ const storage = new CloudinaryStorage({
   cloudinary: cloudinary as any,
   params: {
     allowed_formats: ["jpg", "jpeg", "png", "webp"],
-    transformation: "w_800,h_800,c_limit", // Resize images to max 800x800
+    transformation: [{ width: 800, height: 800, crop: "limit" }],
     folder: "medigo-products", // Folder in Cloudinary
   } as any,
 });
@@ -46,12 +46,29 @@ const imageFilter = (
 //  upload.productImage — single image for products, max 5MB
 //  Usage: router.post("/products", protect, upload.productImage, createProduct)
 // ══════════════════════════════════════════════════════
+const productImageUploader = multer({
+  storage,
+  fileFilter: imageFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+}).fields([
+  { name: "image", maxCount: 1 },
+  { name: "images", maxCount: 1 },
+]);
+
+const productImage = (req: Request, res: Response, next: NextFunction): void => {
+  productImageUploader(req, res, (err) => {
+    if (err) return next(err);
+
+    const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+    const file = files?.image?.[0] || files?.images?.[0];
+    if (file) req.file = file;
+
+    next();
+  });
+};
+
 export const upload = {
-  productImage: multer({
-    storage,
-    fileFilter: imageFilter,
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
-  }).single("image"),
+  productImage,
   avatar: multer({
     storage,
     fileFilter: imageFilter,

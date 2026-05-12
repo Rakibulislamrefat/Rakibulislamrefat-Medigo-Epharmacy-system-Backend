@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import multer from "multer";
 import { ApiError } from "../shared/utils";
 
 // ══════════════════════════════════════════════════════
@@ -17,6 +18,10 @@ export const errorHandler = (
   let statusCode = 500;
   let message    = "Internal server error";
   let errors: string[] | undefined;
+  const isDev = process.env.NODE_ENV !== "production";
+  const nestedCloudinaryError = (err as any).error;
+  const rawMessage = err.message || nestedCloudinaryError?.message || "";
+  const lowerMessage = rawMessage.toLowerCase();
 
   // ── Known ApiError ─────────────────────────────────
   if (err instanceof ApiError) {
@@ -26,6 +31,35 @@ export const errorHandler = (
   }
 
   // ── Mongoose validation error ──────────────────────
+  else if (err instanceof multer.MulterError) {
+    statusCode = 400;
+    message =
+      err.code === "LIMIT_UNEXPECTED_FILE"
+        ? "Unexpected image field. Use 'image' for the product image."
+        : err.message;
+  }
+
+  else if (
+    (err as any).http_code ||
+    nestedCloudinaryError?.http_code ||
+    lowerMessage.includes("cloudinary") ||
+    lowerMessage.includes("api_key") ||
+    lowerMessage.includes("cloud_name") ||
+    lowerMessage.includes("upload") ||
+    lowerMessage.includes("socket hang up") ||
+    lowerMessage.includes("timeout")
+  ) {
+    statusCode = nestedCloudinaryError?.http_code === 401 ? 401 : 502;
+    message = rawMessage
+      ? `Image upload failed: ${rawMessage}`
+      : "Image upload failed. Please check Cloudinary configuration and image file.";
+  }
+
+  else if (lowerMessage.includes("multipart")) {
+    statusCode = 400;
+    message = "Invalid multipart/form-data request. Send FormData without manually setting Content-Type.";
+  }
+
   else if (err.name === "ValidationError") {
     statusCode = 400;
     message    = "Validation failed";
@@ -59,8 +93,9 @@ export const errorHandler = (
   }
 
   // ── Log in development ─────────────────────────────
-  if (process.env.NODE_ENV === "development") {
-    console.error(`[ERROR] ${err.stack}`);
+  if (isDev) {
+    console.error(`[ERROR] ${req.method} ${req.originalUrl}`);
+    console.error(err.stack || err);
   }
 
   res.status(statusCode).json({
@@ -68,7 +103,7 @@ export const errorHandler = (
     statusCode,
     message,
     ...(errors && { errors }),
-    ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
+    ...(isDev && { error: rawMessage, stack: err.stack }),
   });
 };
 
