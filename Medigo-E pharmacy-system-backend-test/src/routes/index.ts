@@ -14,6 +14,7 @@ import branchRoutes from "../modules/branch/branch.routes";
 import notificationRoutes from "../modules/notification/notification.routes";
 import sslcommerzRoutes from "../modules/sslcommerz/sslcommerz.routes";
 import adminRoutes from "../modules/admin/admin.routes";
+import addressRoutes from "../modules/address/address.route";
 
 const router = Router();
 
@@ -32,5 +33,6 @@ router.use("/reviews", reviewRoutes);
 router.use("/coupons", couponRoutes);
 router.use("/branches", branchRoutes);
 router.use("/notifications", notificationRoutes);
+router.use("/addresses", addressRoutes);
 
 export default router;
