@@ -1,6 +1,14 @@
 import { Request, Response } from "express";
 import { ApiError, ApiResponse, asyncHandler } from "../../shared/utils";
 import { SSLCommerzService } from "./sslcommerz.service";
+import env from "../../config/env";
+
+const getCallbackPayload = (req: Request) => ({
+  ...(req.query || {}),
+  ...(req.body || {}),
+});
+
+const getClientUrl = () => env.CLIENT_URL || env.FRONTEND_URL;
 
 export const initiateSSLCommerzPayment = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.id;
@@ -19,10 +27,10 @@ export const handleSSLIPN = asyncHandler(async (req: Request, res: Response) => 
 });
 
 export const handlePaymentSuccess = asyncHandler(async (req: Request, res: Response) => {
-  const payload = req.body || req.query;
+  const payload = getCallbackPayload(req);
   const tranId = payload.tran_id;
   if (!tranId) {
-    throw new ApiError(400, "Transaction id is required");
+    return res.redirect(`${getClientUrl()}/payment/failed?reason=missing_transaction_id`);
   }
 
   const validationPayload = {
@@ -31,7 +39,7 @@ export const handlePaymentSuccess = asyncHandler(async (req: Request, res: Respo
   };
 
   const sslcz = require("sslcommerz-lts");
-  const client = new sslcz(process.env.SSL_APP_STORE_ID, process.env.SSL_APP_PASSWORD, process.env.SSL_IS_LIVE === "true");
+  const client = new sslcz(env.SSL_APP_STORE_ID, env.SSL_APP_PASSWORD, env.SSL_IS_LIVE === "true");
 
   let verification: any = null;
   try {
@@ -48,27 +56,27 @@ export const handlePaymentSuccess = asyncHandler(async (req: Request, res: Respo
     await SSLCommerzService.processIpn({ ...payload, status: "VALID", verification });
   }
 
-  return res.redirect(`${process.env.CLIENT_URL || process.env.FRONTEND_URL}/payment/success?tran_id=${tranId}`);
+  return res.redirect(`${getClientUrl()}/payment/success?tran_id=${encodeURIComponent(String(tranId))}`);
 });
 
 export const handlePaymentFailed = asyncHandler(async (req: Request, res: Response) => {
-  const payload = req.body || req.query;
+  const payload = getCallbackPayload(req);
   const tranId = payload.tran_id;
   if (tranId) {
     await SSLCommerzService.processIpn({ ...payload, status: "FAILED" });
   }
 
-  return res.redirect(`${process.env.CLIENT_URL || process.env.FRONTEND_URL}/payment/failed?tran_id=${tranId || ""}`);
+  return res.redirect(`${getClientUrl()}/payment/failed?tran_id=${encodeURIComponent(String(tranId || ""))}`);
 });
 
 export const handlePaymentCancel = asyncHandler(async (req: Request, res: Response) => {
-  const payload = req.body || req.query;
+  const payload = getCallbackPayload(req);
   const tranId = payload.tran_id;
   if (tranId) {
     await SSLCommerzService.processIpn({ ...payload, status: "FAILED" });
   }
 
-  return res.redirect(`${process.env.CLIENT_URL || process.env.FRONTEND_URL}/payment/cancelled?tran_id=${tranId || ""}`);
+  return res.redirect(`${getClientUrl()}/payment/cancelled?tran_id=${encodeURIComponent(String(tranId || ""))}`);
 });
 
 export const validatePayment = asyncHandler(async (req: Request, res: Response) => {
