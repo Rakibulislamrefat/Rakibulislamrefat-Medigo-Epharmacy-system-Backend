@@ -17,6 +17,8 @@ const getSSLCommerzClient = () => {
   );
 };
 
+const getApiBaseUrl = () => `${env.BACKEND_URL.replace(/\/$/, "")}/api/v1`;
+
 export const generateSslTransactionId = (orderId: string) => {
   const now = new Date();
   const date = now.toLocaleDateString("en-GB").replace(/\//g, "");
@@ -56,10 +58,10 @@ export class SSLCommerzService {
       total_amount: amount,
       currency: "BDT",
       tran_id: transactionId,
-      success_url: `${env.BACKEND_URL}/sslcommerz/success`,
-      fail_url: `${env.BACKEND_URL}/sslcommerz/fail`,
-      cancel_url: `${env.BACKEND_URL}/sslcommerz/cancel`,
-      ipn_url: `${env.BACKEND_URL}/sslcommerz/ipn`,
+      success_url: `${getApiBaseUrl()}/sslcommerz/success`,
+      fail_url: `${getApiBaseUrl()}/sslcommerz/fail`,
+      cancel_url: `${getApiBaseUrl()}/sslcommerz/cancel`,
+      ipn_url: `${getApiBaseUrl()}/sslcommerz/ipn`,
       shipping_method: "NO",
       product_name: `Order ${order.orderNumber}`,
       product_category: "E-Pharmacy",
