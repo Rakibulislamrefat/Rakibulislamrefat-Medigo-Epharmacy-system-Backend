@@ -7,6 +7,8 @@ import {
   getAdminDoctors,
   getAdminConsultancies,
   updateAdminUser,
+  updateAdminOrder,
+  updateAdminOrderStatus,
 } from "./admin.controller";
 import {
   createProduct,
@@ -17,29 +19,31 @@ import { protect, authorize } from "../../middleware";
 
 const router = Router();
 
-// Protected routes - admin only
-router.use(protect, authorize("admin"));
+// Protected routes - requires authentication
+router.use(protect);
 
-// Metrics
-router.get("/metrics", getAdminMetrics);
+// Metrics - Admin only
+router.get("/metrics", authorize("admin"), getAdminMetrics);
 
-// Users
-router.get("/users", getAdminUsers);
-router.patch("/users/:id", updateAdminUser);
+// Users - Admin only
+router.get("/users", authorize("admin"), getAdminUsers);
+router.patch("/users/:id", authorize("admin"), updateAdminUser);
 
-// Medicines
-router.get("/medicines", getAdminMedicines);
-router.post("/medicines", createProduct);
-router.patch("/medicines/:id", updateProduct);
-router.delete("/medicines/:id", deleteProduct);
+// Medicines - Admin and Pharmacist
+router.get("/medicines", authorize("admin", "pharmacist"), getAdminMedicines);
+router.post("/medicines", authorize("admin", "pharmacist"), createProduct);
+router.patch("/medicines/:id", authorize("admin", "pharmacist"), updateProduct);
+router.delete("/medicines/:id", authorize("admin", "pharmacist"), deleteProduct);
 
-// Orders
-router.get("/orders", getAdminOrders);
+// Orders - Admin and Pharmacist
+router.get("/orders", authorize("admin", "pharmacist"), getAdminOrders);
+router.patch("/orders/:id", authorize("admin", "pharmacist"), updateAdminOrder);
+router.patch("/orders/:id/status", authorize("admin", "pharmacist"), updateAdminOrderStatus);
 
-// Doctors
-router.get("/doctors", getAdminDoctors);
+// Doctors - Admin only
+router.get("/doctors", authorize("admin"), getAdminDoctors);
 
-// Consultancies
-router.get("/consultancies", getAdminConsultancies);
+// Consultancies - Admin only (could also be Doctor/Pharmacist)
+router.get("/consultancies", authorize("admin"), getAdminConsultancies);
 
 export default router;

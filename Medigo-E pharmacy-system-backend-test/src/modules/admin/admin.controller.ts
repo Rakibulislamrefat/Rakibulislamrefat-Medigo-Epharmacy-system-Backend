@@ -50,8 +50,8 @@ export const getAdminUsers = asyncHandler(async (req: Request, res: Response) =>
 
   res.status(200).json(
     new ApiResponse(200, "Admin users retrieved", {
-      data,
-      meta: {
+      items: data,
+      pagination: {
         page: Number(page),
         limit: Number(limit),
         total,
@@ -80,8 +80,8 @@ export const getAdminMedicines = asyncHandler(async (req: Request, res: Response
 
   res.status(200).json(
     new ApiResponse(200, "Admin medicines retrieved", {
-      data,
-      meta: {
+      items: data,
+      pagination: {
         page: Number(page),
         limit: Number(limit),
         total,
@@ -101,14 +101,21 @@ export const getAdminOrders = asyncHandler(async (req: Request, res: Response) =
 
   const skip = (Number(page) - 1) * Number(limit);
   const [data, total] = await Promise.all([
-    Order.find(query).skip(skip).limit(Number(limit)),
+    Order.find(query)
+      .populate("user", "name email phone")
+      .populate("items.product")
+      .populate("prescription")
+      .populate("appliedCoupon")
+      .skip(skip)
+      .limit(Number(limit))
+      .sort({ createdAt: -1 }),
     Order.countDocuments(query),
   ]);
 
   res.status(200).json(
     new ApiResponse(200, "Admin orders retrieved", {
-      data,
-      meta: {
+      items: data,
+      pagination: {
         page: Number(page),
         limit: Number(limit),
         total,
@@ -139,8 +146,8 @@ export const getAdminDoctors = asyncHandler(async (req: Request, res: Response) 
 
   res.status(200).json(
     new ApiResponse(200, "Admin doctors retrieved", {
-      data,
-      meta: {
+      items: data,
+      pagination: {
         page: Number(page),
         limit: Number(limit),
         total,
@@ -171,8 +178,8 @@ export const getAdminConsultancies = asyncHandler(async (req: Request, res: Resp
 
   res.status(200).json(
     new ApiResponse(200, "Admin consultancies retrieved", {
-      data,
-      meta: {
+      items: data,
+      pagination: {
         page: Number(page),
         limit: Number(limit),
         total,
@@ -198,4 +205,25 @@ export const updateAdminUser = asyncHandler(async (req: Request, res: Response) 
   }
 
   res.status(200).json(new ApiResponse(200, "User updated", user));
+});
+
+export const updateAdminOrder = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const order = await Order.findByIdAndUpdate(id, req.body, { new: true });
+  if (!order) {
+    res.status(404).json(new ApiResponse(404, "Order not found"));
+    return;
+  }
+  res.status(200).json(new ApiResponse(200, "Order updated", order));
+});
+
+export const updateAdminOrderStatus = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  const order = await Order.findByIdAndUpdate(id, { status }, { new: true });
+  if (!order) {
+    res.status(404).json(new ApiResponse(404, "Order not found"));
+    return;
+  }
+  res.status(200).json(new ApiResponse(200, "Order status updated", order));
 });

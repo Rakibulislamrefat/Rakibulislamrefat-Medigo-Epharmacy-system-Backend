@@ -4,6 +4,7 @@ export type OrderStatus =
   | "pending"
   | "confirmed"
   | "processing"
+  | "ready"
   | "shipped"
   | "delivered"
   | "cancelled"
@@ -29,7 +30,7 @@ const OrderSchema = new Schema(
     items: { type: [OrderItemSchema], default: [] },
     status: {
       type: String,
-      enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded"],
+      enum: ["pending", "confirmed", "processing", "ready", "shipped", "delivered", "cancelled", "refunded"],
       default: "pending",
       index: true,
     },
