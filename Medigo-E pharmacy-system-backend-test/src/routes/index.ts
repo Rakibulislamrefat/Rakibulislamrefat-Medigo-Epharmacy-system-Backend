@@ -12,7 +12,9 @@ import reviewRoutes from "../modules/review/review.routes";
 import couponRoutes from "../modules/coupon/coupon.routes";
 import branchRoutes from "../modules/branch/branch.routes";
 import notificationRoutes from "../modules/notification/notification.routes";
+import sslcommerzRoutes from "../modules/sslcommerz/sslcommerz.routes";
 import adminRoutes from "../modules/admin/admin.routes";
+import addressRoutes from "../modules/address/address.route";
 
 const router = Router();
 
@@ -25,10 +27,12 @@ router.use("/doctors", doctorRoutes);
 router.use("/consultancies", consultancyRoutes);
 router.use("/prescriptions", prescriptionRoutes);
 router.use("/payment-transactions", paymentTransactionRoutes);
+router.use("/sslcommerz", sslcommerzRoutes);
 router.use("/carts", cartRoutes);
 router.use("/reviews", reviewRoutes);
 router.use("/coupons", couponRoutes);
 router.use("/branches", branchRoutes);
 router.use("/notifications", notificationRoutes);
+router.use("/addresses", addressRoutes);
 
 export default router;

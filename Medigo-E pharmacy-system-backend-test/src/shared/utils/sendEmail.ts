@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import * as nodemailer from "nodemailer";
 import env from "../../config/env";
 interface EmailOptions {
   to:      string;

@@ -25,7 +25,9 @@
     "mongoose": "^8.3.1",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
+    "multer-storage-cloudinary": "^4.0.0",
     "nodemailer": "^8.0.2",
+    "sslcommerz-lts": "^1.2.0",
     "ua-parser-js": "^1.0.37",
     "zod": "^3.23.0"
   },
