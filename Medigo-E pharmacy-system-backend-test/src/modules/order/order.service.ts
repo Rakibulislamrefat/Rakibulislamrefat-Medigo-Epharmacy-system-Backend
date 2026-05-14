@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Order from "./Order.schema";
 import Product from "../product/Product.schema";
 import Coupon from "../coupon/Coupon.schema";
+import Cart from "../cart/Cart.schema";
 import { ApiError, paginate } from "../../shared/utils";
 
 const isValidId = (id: string) => mongoose.Types.ObjectId.isValid(id);
@@ -110,6 +111,8 @@ export class OrderService {
       prescription: prescription || null,
       appliedCoupon: appliedCoupon || null,
     });
+
+    await Cart.findOneAndUpdate({ user: userId }, { $set: { items: [] } });
 
     return created;
   }

@@ -17,7 +17,10 @@ const getSSLCommerzClient = () => {
   );
 };
 
-const getApiBaseUrl = () => `${env.BACKEND_URL.replace(/\/$/, "")}/api/v1`;
+const getApiBaseUrl = () => {
+  const baseUrl = env.BACKEND_URL.replace(/\/$/, "");
+  return baseUrl.endsWith("/api/v1") ? baseUrl : `${baseUrl}/api/v1`;
+};
 
 export const generateSslTransactionId = (orderId: string) => {
   const now = new Date();
