@@ -17,8 +17,9 @@ const corsOptions: CorsOptions = {
     origin: string | undefined,
     callback: (err: Error | null, allow?: boolean) => void
   ) => {
-    // allow requests with no origin (Postman, mobile apps, curl)
-    if (!origin) {
+    // Allow requests with no browser origin, and payment/browser redirects that
+    // send the literal "null" origin.
+    if (!origin || origin === "null") {
       callback(null, true);
       return;
     }

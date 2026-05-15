@@ -25,8 +25,13 @@
     "mongoose": "^8.3.1",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
+<<<<<<< HEAD
     "multer-storage-cloudinary-v2": "^1.0.3",
+=======
+    "multer-storage-cloudinary": "^4.0.0",
+>>>>>>> 679f2525180af78ae4e1d23e9d9ba15cc7d5eebc
     "nodemailer": "^8.0.2",
+    "sslcommerz-lts": "^1.2.0",
     "ua-parser-js": "^1.0.37",
     "zod": "^3.23.0"
   },

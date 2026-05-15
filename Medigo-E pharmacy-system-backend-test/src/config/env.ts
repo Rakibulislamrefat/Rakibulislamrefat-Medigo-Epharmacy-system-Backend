@@ -1,4 +1,4 @@
-import dotenv from "dotenv";
+import * as dotenv from "dotenv";
 
 dotenv.config();
 
@@ -54,6 +54,15 @@ const env = {
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME!,
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY!,
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET!,
+
+  // sslcommerz
+  SSL_APP_STORE_ID: process.env.SSL_APP_STORE_ID || "",
+  SSL_APP_PASSWORD: process.env.SSL_APP_PASSWORD || "",
+  SSL_IS_LIVE: process.env.SSL_IS_LIVE || "false",
+
+  // urls
+  BACKEND_URL: process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`,
+  FRONTEND_URL: process.env.FRONTEND_URL || process.env.CLIENT_URL!,
 
   // helpers
   isDev:  process.env.NODE_ENV !== "production",

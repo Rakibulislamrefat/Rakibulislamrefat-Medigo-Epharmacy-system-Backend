@@ -15,6 +15,7 @@ app.use(helmet());
 app.use(corsMiddleware);
 app.use(morgan("dev"));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use("/api/v1/orders", requireAuth, orderRoutes);
 app.use("/api/v1", router);
