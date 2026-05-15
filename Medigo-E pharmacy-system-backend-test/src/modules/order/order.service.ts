@@ -44,41 +44,102 @@ export class OrderService {
     if (!isValidId(userId)) throw new ApiError(400, "Invalid user id");
     const { items, deliveryFee, contactName, contactPhone, deliveryAddress, notes, appliedCoupon, prescription, paymentStatus, status } =
       payload || {};
+       console.log("Creating order with payload:", payload);
 
     if (!Array.isArray(items) || items.length === 0) throw new ApiError(400, "items is required");
 
+    const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
     const normalizedItems = items.map((it: any) => ({
-      product: it.product || it.medicine,
+      productId: it.product || it.medicine || it.productId || it.id || null,
+      productName: (it.name || it.productName || it.title || "").trim(),
+      price: it.price != null ? Number(it.price) : null,
       qty: Number(it.qty),
     }));
 
     for (const it of normalizedItems) {
-      if (!it.product) throw new ApiError(400, "product is required in items");
+      if (!it.productId && !it.productName) {
+        throw new ApiError(400, "product id or name is required in items");
+      }
       if (!Number.isFinite(it.qty) || it.qty < 1) throw new ApiError(400, "qty must be >= 1");
-      if (!isValidId(String(it.product))) throw new ApiError(400, "Invalid product id in items");
+      if (it.productId && !isValidId(String(it.productId))) {
+        throw new ApiError(400, "Invalid product id in items");
+      }
+      if (it.price != null && (!Number.isFinite(it.price) || it.price < 0)) {
+        throw new ApiError(400, "price must be a valid non-negative number");
+      }
     }
 
-    const productIds = normalizedItems.map((i) => new mongoose.Types.ObjectId(i.product));
-    const products = await Product.find({ _id: { $in: productIds }, status: "active" }).select(
-      "name price salePrice stockQty requiresPrescription currency",
-    );
-    if (products.length !== productIds.length) throw new ApiError(400, "One or more products not found");
+    const productIds = normalizedItems
+      .filter((i) => i.productId)
+      .map((i) => new mongoose.Types.ObjectId(i.productId));
 
-    const productMap = new Map<string, any>(products.map((p: any) => [String(p._id), p]));
+    const productNameSet = Array.from(
+      new Set(normalizedItems.filter((i) => !i.productId && i.productName).map((i) => i.productName.toLowerCase())),
+    );
+
+    const nameQueries: any[] = [];
+    for (const rawName of productNameSet) {
+      const name = rawName.trim();
+      if (!name) continue;
+      const pattern = new RegExp(`^${escapeRegExp(name)}$`, "i");
+      nameQueries.push({ name: pattern }, { genericName: pattern }, { brandName: pattern }, { slug: pattern });
+    }
+
+    const query: any = { status: "active" };
+    if (productIds.length > 0 && nameQueries.length > 0) {
+      query.$or = [{ _id: { $in: productIds } }, ...nameQueries];
+    } else if (productIds.length > 0) {
+      query._id = { $in: productIds };
+    } else if (nameQueries.length > 0) {
+      query.$or = nameQueries;
+    }
+
+    const products = await Product.find(query).select(
+      "name price salePrice stockQty requiresPrescription currency slug genericName brandName",
+    );
+    if (productIds.length > 0) {
+      const foundIds = new Set(products.map((p: any) => String(p._id)));
+      if (productIds.some((id) => !foundIds.has(String(id)))) {
+        throw new ApiError(400, "One or more products not found");
+      }
+    }
+
+    const productMapById = new Map<string, any>(products.map((p: any) => [String(p._id), p]));
+    const productMapByName = new Map<string, any>();
+    for (const p of products) {
+      if (p.name) productMapByName.set(String(p.name).toLowerCase(), p);
+      if (p.genericName) productMapByName.set(String(p.genericName).toLowerCase(), p);
+      if (p.brandName) productMapByName.set(String(p.brandName).toLowerCase(), p);
+      if (p.slug) productMapByName.set(String(p.slug).toLowerCase(), p);
+    }
 
     const orderItems = normalizedItems.map((it) => {
-      const p = productMap.get(String(it.product));
-      const unitPrice = p.salePrice != null ? Number(p.salePrice) : Number(p.price);
-      const lineTotal = unitPrice * it.qty;
+      const p = it.productId
+        ? productMapById.get(String(it.productId))
+        : productMapByName.get(String(it.productName).toLowerCase());
+      if (!p) {
+        throw new ApiError(400, `Product not found for item '${it.productName || it.productId}'`);
+      }
+      const selectedPrice = it.price != null
+        ? it.price
+        : p.salePrice != null
+        ? Number(p.salePrice)
+        : Number(p.price);
+      if (!Number.isFinite(selectedPrice) || selectedPrice < 0) {
+        throw new ApiError(400, `Invalid price for item '${it.productName || it.productId}'`);
+      }
+      const lineTotal = selectedPrice * it.qty;
       return {
         product: p._id,
         nameSnapshot: p.name,
-        unitPrice,
+        unitPrice: selectedPrice,
         qty: it.qty,
         lineTotal,
       };
     });
 
+    const productMap = new Map<string, any>(products.map((p: any) => [String(p._id), p]));
     for (const it of orderItems) {
       const p = productMap.get(String(it.product));
       if (Number(p.stockQty) < Number(it.qty)) {

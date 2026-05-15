@@ -4,6 +4,8 @@ import {
   getAdminUsers,
   getAdminMedicines,
   getAdminOrders,
+  getAdminReadyOrders,
+  getAdminPendingOrders,
   getAdminDoctors,
   getAdminConsultancies,
   updateAdminUser,
@@ -36,6 +38,8 @@ router.patch("/medicines/:id", authorize("admin", "pharmacist"), updateProduct);
 router.delete("/medicines/:id", authorize("admin", "pharmacist"), deleteProduct);
 
 // Orders - Admin and Pharmacist
+router.get("/orders/ready", authorize("admin", "pharmacist"), getAdminReadyOrders);
+router.get("/orders/pending", authorize("admin", "pharmacist"), getAdminPendingOrders);
 router.get("/orders", authorize("admin", "pharmacist"), getAdminOrders);
 router.patch("/orders/:id", authorize("admin", "pharmacist"), updateAdminOrder);
 router.patch("/orders/:id/status", authorize("admin", "pharmacist"), updateAdminOrderStatus);

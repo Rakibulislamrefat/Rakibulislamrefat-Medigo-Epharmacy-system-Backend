@@ -4,6 +4,8 @@ import helmet from "helmet";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import router from "./routes";
+import orderRoutes from "./routes/orders";
+import { protect as requireAuth } from "./middleware/auth.middleware";
 import { errorHandler } from "./middleware";
 
 const app = express();
@@ -14,7 +16,8 @@ app.use(corsMiddleware);
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(cookieParser());
-app.use("/api/v1",router)
+app.use("/api/v1/orders", requireAuth, orderRoutes);
+app.use("/api/v1", router);
 app.use(errorHandler);
 
 

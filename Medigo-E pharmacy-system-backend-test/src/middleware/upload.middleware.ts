@@ -1,6 +1,6 @@
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
-import * as multerStorageCloudinary from "multer-storage-cloudinary";
+import { CloudinaryStorage } from "multer-storage-cloudinary-v2";
 import { NextFunction, Request, Response } from "express";
 import { ApiError } from "../shared/utils";
 import env from "../config/env";
@@ -15,7 +15,6 @@ cloudinary.config({
 // ══════════════════════════════════════════════════════
 //  Cloudinary Storage — uploads to Cloudinary
 // ══════════════════════════════════════════════════════
-const { CloudinaryStorage } = multerStorageCloudinary;
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary as any,
   params: {

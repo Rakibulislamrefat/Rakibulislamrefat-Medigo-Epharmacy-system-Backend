@@ -95,7 +95,16 @@ export const getAdminOrders = asyncHandler(async (req: Request, res: Response) =
   const { q, page = 1, limit = 10, status, paymentStatus } = req.query;
 
   const query: any = {};
-  if (q) query.orderNumber = { $regex: q, $options: "i" };
+  if (q) query.$or = [
+    { orderNumber: { $regex: q, $options: "i" } },
+    { contactName: { $regex: q, $options: "i" } },
+    { contactPhone: { $regex: q, $options: "i" } },
+    { "deliveryAddress.line1": { $regex: q, $options: "i" } },
+    { "deliveryAddress.city": { $regex: q, $options: "i" } },
+    { "deliveryAddress.postcode": { $regex: q, $options: "i" } },
+    { notes: { $regex: q, $options: "i" } },
+    { "items.nameSnapshot": { $regex: q, $options: "i" } },
+  ];
   if (status) query.status = status;
   if (paymentStatus) query.paymentStatus = paymentStatus;
 
@@ -114,6 +123,48 @@ export const getAdminOrders = asyncHandler(async (req: Request, res: Response) =
 
   res.status(200).json(
     new ApiResponse(200, "Admin orders retrieved", {
+      items: data,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        totalPages: Math.ceil(total / Number(limit)),
+      },
+    })
+  );
+});
+
+export const getAdminPendingOrders = asyncHandler(async (req: Request, res: Response) => {
+  const { q, page = 1, limit = 10, paymentStatus } = req.query;
+
+  const query: any = { status: "pending" };
+  if (q) query.$or = [
+    { orderNumber: { $regex: q, $options: "i" } },
+    { contactName: { $regex: q, $options: "i" } },
+    { contactPhone: { $regex: q, $options: "i" } },
+    { "deliveryAddress.line1": { $regex: q, $options: "i" } },
+    { "deliveryAddress.city": { $regex: q, $options: "i" } },
+    { "deliveryAddress.postcode": { $regex: q, $options: "i" } },
+    { notes: { $regex: q, $options: "i" } },
+    { "items.nameSnapshot": { $regex: q, $options: "i" } },
+  ];
+  if (paymentStatus) query.paymentStatus = paymentStatus;
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const [data, total] = await Promise.all([
+    Order.find(query)
+      .populate("user", "name email phone")
+      .populate("items.product")
+      .populate("prescription")
+      .populate("appliedCoupon")
+      .skip(skip)
+      .limit(Number(limit))
+      .sort({ createdAt: -1 }),
+    Order.countDocuments(query),
+  ]);
+
+  res.status(200).json(
+    new ApiResponse(200, "Admin pending orders retrieved", {
       items: data,
       pagination: {
         page: Number(page),
@@ -226,4 +277,37 @@ export const updateAdminOrderStatus = asyncHandler(async (req: Request, res: Res
     return;
   }
   res.status(200).json(new ApiResponse(200, "Order status updated", order));
+});
+
+export const getAdminReadyOrders = asyncHandler(async (req: Request, res: Response) => {
+  const { q, page = 1, limit = 10, paymentStatus } = req.query;
+
+  const query: any = { status: "ready" };
+  if (q) query.orderNumber = { $regex: q, $options: "i" };
+  if (paymentStatus) query.paymentStatus = paymentStatus;
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const [data, total] = await Promise.all([
+    Order.find(query)
+      .populate("user", "name email phone")
+      .populate("items.product")
+      .populate("prescription")
+      .populate("appliedCoupon")
+      .skip(skip)
+      .limit(Number(limit))
+      .sort({ createdAt: -1 }),
+    Order.countDocuments(query),
+  ]);
+
+  res.status(200).json(
+    new ApiResponse(200, "Admin ready orders retrieved", {
+      items: data,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        totalPages: Math.ceil(total / Number(limit)),
+      },
+    })
+  );
 });
