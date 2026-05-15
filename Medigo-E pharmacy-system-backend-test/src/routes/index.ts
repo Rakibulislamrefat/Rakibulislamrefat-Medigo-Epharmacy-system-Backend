@@ -15,10 +15,12 @@ import notificationRoutes from "../modules/notification/notification.routes";
 import sslcommerzRoutes from "../modules/sslcommerz/sslcommerz.routes";
 import adminRoutes from "../modules/admin/admin.routes";
 import addressRoutes from "../modules/address/address.route";
+import configRoutes from "../modules/config/config.routes";
 
 const router = Router();
 
 router.use("/auth", authRoutes);
+router.use("/config", configRoutes);
 router.use("/admin", adminRoutes);
 router.use("/users", userRoutes);
 router.use("/products", productRoutes);

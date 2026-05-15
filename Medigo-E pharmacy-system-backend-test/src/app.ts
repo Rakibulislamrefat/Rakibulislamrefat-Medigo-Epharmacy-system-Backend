@@ -7,6 +7,7 @@ import router from "./routes";
 import orderRoutes from "./routes/orders";
 import { protect as requireAuth } from "./middleware/auth.middleware";
 import { errorHandler } from "./middleware";
+import { env } from "process";
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.use("/api/v1/orders", requireAuth, orderRoutes);
 app.use("/api/v1", router);
 app.use(errorHandler);
 
+console.log("App initialized with the following configuration:", env.SSL_APP_STORE_ID);
 
 app.get("/", (req, res) => {
   res

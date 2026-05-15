@@ -210,6 +210,63 @@ export class OrderService {
     return doc;
   }
 
+  static async trackForUser(userId: string, idOrNumber: string) {
+    if (!isValidId(userId)) throw new ApiError(400, "Invalid user id");
+
+    const filter = isValidId(idOrNumber)
+      ? { _id: idOrNumber, user: userId }
+      : { orderNumber: idOrNumber, user: userId };
+
+    const order: any = await Order.findOne(filter).populate("items.product appliedCoupon prescription");
+    if (!order) throw new ApiError(404, "Order not found for this user");
+
+    const statusFlow = ["pending", "confirmed", "processing", "ready", "shipped", "delivered"];
+    const terminalStatuses = ["cancelled", "refunded"];
+    const currentStatus = String(order.status);
+    const currentIndex = statusFlow.indexOf(currentStatus);
+
+    const timeline = statusFlow.map((status, index) => ({
+      status,
+      completed: currentIndex >= index,
+      current: currentStatus === status,
+      timestamp:
+        status === "pending"
+          ? order.createdAt
+          : currentStatus === status
+          ? order.updatedAt
+          : null,
+    }));
+
+    if (terminalStatuses.includes(currentStatus)) {
+      timeline.push({
+        status: currentStatus,
+        completed: true,
+        current: true,
+        timestamp: order.updatedAt,
+      });
+    }
+
+    return {
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      placedAt: order.createdAt,
+      lastUpdatedAt: order.updatedAt,
+      estimatedDelivery: order.estimatedDelivery || null,
+      timeline,
+      deliveryAddress: order.deliveryAddress,
+      contactPhone: order.contactPhone,
+      items: order.items,
+      totals: {
+        subtotal: order.subtotal,
+        discountTotal: order.discountTotal,
+        deliveryFee: order.deliveryFee,
+        grandTotal: order.grandTotal,
+      },
+    };
+  }
+
   static async update(id: string, payload: any) {
     if (!isValidId(id)) throw new ApiError(400, "Invalid order id");
     const updated = await Order.findByIdAndUpdate(id, payload, { new: true });
