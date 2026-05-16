@@ -1,14 +1,17 @@
 import mongoose, { Schema, model, Types } from "mongoose";
 
-export type ConsultancyStatus = "requested" | "confirmed" | "completed" | "cancelled";
+export type ConsultancyStatus = "requested" | "confirmed" | "ready" | "completed" | "cancelled";
 
 const ConsultancySchema = new Schema(
   {
-    user: { type: Types.ObjectId, ref: "User", required: true, index: true },
+    user: { type: Types.ObjectId, ref: "User", default: null, index: true },
     doctor: { type: Types.ObjectId, ref: "Doctor", required: true, index: true },
+    patientName: { type: String, default: "" },
+    contactPhone: { type: String, default: "" },
+    contactEmail: { type: String, default: "" },
     status: {
       type: String,
-      enum: ["requested", "confirmed", "completed", "cancelled"],
+      enum: ["requested", "confirmed", "ready", "completed", "cancelled"],
       default: "requested",
       index: true,
     },

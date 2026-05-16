@@ -7,7 +7,10 @@ import {
   getAdminReadyOrders,
   getAdminPendingOrders,
   getAdminDoctors,
+  getAdminReadyDoctors,
   getAdminConsultancies,
+  createAdminConsultancy,
+  updateAdminConsultancy,
   updateAdminUser,
   updateAdminOrder,
   updateAdminOrderStatus,
@@ -45,9 +48,12 @@ router.patch("/orders/:id", authorize("admin", "pharmacist"), updateAdminOrder);
 router.patch("/orders/:id/status", authorize("admin", "pharmacist"), updateAdminOrderStatus);
 
 // Doctors - Admin only
+router.get("/doctors/ready", authorize("admin"), getAdminReadyDoctors);
 router.get("/doctors", authorize("admin"), getAdminDoctors);
 
 // Consultancies - Admin only (could also be Doctor/Pharmacist)
 router.get("/consultancies", authorize("admin"), getAdminConsultancies);
+router.post("/consultancies", authorize("admin"), createAdminConsultancy);
+router.patch("/consultancies/:id", authorize("admin"), updateAdminConsultancy);
 
 export default router;

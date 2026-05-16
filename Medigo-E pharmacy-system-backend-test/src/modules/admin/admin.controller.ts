@@ -208,6 +208,39 @@ export const getAdminDoctors = asyncHandler(async (req: Request, res: Response) 
   );
 });
 
+export const getAdminReadyDoctors = asyncHandler(async (req: Request, res: Response) => {
+  const { q, page = 1, limit = 10, specialization } = req.query;
+
+  const query: any = { status: "active" };
+  if (q) query.$or = [
+    { fullName: { $regex: q, $options: "i" } },
+    { specialization: { $regex: q, $options: "i" } },
+  ];
+  if (specialization) query.specialization = specialization;
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const [data, total] = await Promise.all([
+    Doctor.find(query)
+      .populate("user", "name email phone")
+      .skip(skip)
+      .limit(Number(limit))
+      .sort({ createdAt: -1 }),
+    Doctor.countDocuments(query),
+  ]);
+
+  res.status(200).json(
+    new ApiResponse(200, "Admin ready doctors retrieved", {
+      items: data,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        totalPages: Math.ceil(total / Number(limit)),
+      },
+    })
+  );
+});
+
 export const getAdminConsultancies = asyncHandler(async (req: Request, res: Response) => {
   const { page = 1, limit = 10, status, mode, doctorId, userId } = req.query;
 
@@ -238,6 +271,52 @@ export const getAdminConsultancies = asyncHandler(async (req: Request, res: Resp
       },
     })
   );
+});
+
+export const createAdminConsultancy = asyncHandler(async (req: Request, res: Response) => {
+  const payload = req.body;
+  const consultancy = await Consultancy.create({
+    user: payload.userId || payload.user || null,
+    doctor: payload.doctorId || payload.doctor,
+    status: payload.status || "requested",
+    patientName: payload.patientName || "",
+    contactPhone: payload.contactPhone || "",
+    contactEmail: payload.contactEmail || "",
+    mode: payload.mode || "chat",
+    scheduledAt: payload.scheduledAt || null,
+    durationMinutes: payload.durationMinutes ?? 15,
+    symptoms: payload.symptoms || "",
+    notes: payload.notes || "",
+    attachments: Array.isArray(payload.attachments) ? payload.attachments : [],
+  });
+
+  res.status(201).json(new ApiResponse(201, "Admin consultancy created", consultancy));
+});
+
+export const updateAdminConsultancy = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const payload = req.body;
+  const update: any = {
+    ...payload,
+  };
+
+  if (payload.doctorId) {
+    update.doctor = payload.doctorId;
+    delete update.doctorId;
+  }
+  if (payload.userId) {
+    update.user = payload.userId;
+    delete update.userId;
+  }
+
+  const consultancy = await Consultancy.findByIdAndUpdate(id, update, { new: true });
+
+  if (!consultancy) {
+    res.status(404).json(new ApiResponse(404, "Consultancy not found"));
+    return;
+  }
+
+  res.status(200).json(new ApiResponse(200, "Consultancy updated", consultancy));
 });
 
 export const updateAdminUser = asyncHandler(async (req: Request, res: Response) => {
