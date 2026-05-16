@@ -51,18 +51,19 @@ export class ConsultancyService {
     if (!isValidId(id)) throw new ApiError(400, "Invalid consultancy id");
 
     const doc = await Consultancy.findById(id)
-      .populate("user", "email fullName")
+      .populate("user", "email name fullName")
       .populate("doctor", "fullName");
 
     if (!doc) throw new ApiError(404, "Consultancy not found");
 
-    const recipient = doc.user?.email;
+    const recipient = doc.user?.email || doc.contactEmail;
     if (!recipient) throw new ApiError(400, "No email address found for consultancy user");
 
     const doctorName = doc.doctor?.fullName || "your doctor";
+    const patientName = doc.user?.fullName || doc.user?.name || doc.patientName || "patient";
     const subject = `Consultancy booking confirmation`;
     const html = `
-      <p>Hello ${doc.user?.fullName || "patient"},</p>
+      <p>Hello ${patientName},</p>
       <p>Your consultancy booking has been received for ${doctorName}.</p>
       <p>Appointment mode: ${doc.mode || "chat"}</p>
       <p>Scheduled at: ${doc.scheduledAt ? new Date(doc.scheduledAt).toLocaleString() : "TBD"}</p>
