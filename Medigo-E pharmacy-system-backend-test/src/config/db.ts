@@ -25,53 +25,66 @@ const connectDB = async (): Promise<void> => {
 
     const conn = await connectionPromise;
 
-    console.log(`✅ MongoDB connected: ${conn.connection.host}`);
+    console.log(`MongoDB connected: ${conn.connection.host}`);
 
     // Keep indexes aligned with schema and remove legacy ones.
     // This fixes old TTL indexes (e.g., tokenExpiresAt) that can delete
     // sessions after 15 minutes instead of refresh token expiry.
     await Session.syncIndexes();
-    console.log("✅ Session indexes synchronized");
+    console.log("Session indexes synchronized");
+
+    // Create doctors collection from Doctor.schema.ts if it doesn't exist.
+    try {
+      await Doctor.createCollection();
+      console.log("Doctors collection created from Doctor schema");
+    } catch (err: any) {
+      if (err?.codeName === "NamespaceExists" || err?.code === 48) {
+        console.log("Doctors collection already exists");
+      } else {
+        console.warn("Failed to create doctors collection from schema:", err?.message || err);
+      }
+    }
 
     // Remove legacy `user_1` index on doctors collection if present
     try {
-      const doctorsColl = conn.connection.db.collection("doctors");
-      const existingIndexes = await doctorsColl.indexes();
-      const hasUserIndex = existingIndexes.some((ix: any) => ix.name === "user_1");
-      if (hasUserIndex) {
-        try {
-          await doctorsColl.dropIndex("user_1");
-          console.log("✅ Dropped legacy index 'user_1' on doctors collection");
-        } catch (dropErr) {
-          console.warn("⚠️  Could not drop doctors.user_1 index:", dropErr?.message || dropErr);
+      if (conn.connection.db) {
+        const doctorsColl = conn.connection.db.collection("doctors");
+        const existingIndexes = await doctorsColl.indexes();
+        const hasUserIndex = existingIndexes.some((ix: any) => ix.name === "user_1");
+        if (hasUserIndex) {
+          try {
+            await doctorsColl.dropIndex("user_1");
+            console.log("Dropped legacy index 'user_1' on doctors collection");
+          } catch (dropErr: any) {
+            console.warn("Could not drop doctors.user_1 index:", dropErr?.message || dropErr);
+          }
         }
       }
 
-      // Ensure indexes defined in schema are applied
+      // Ensure indexes defined in schema are applied.
       await Doctor.syncIndexes();
-      console.log("✅ Doctor indexes synchronized");
-    } catch (err) {
-      console.warn("⚠️  Failed to sync/drop Doctor indexes:", err?.message || err);
+      console.log("Doctor indexes synchronized");
+    } catch (err: any) {
+      console.warn("Failed to sync/drop Doctor indexes:", err?.message || err);
     }
 
-    // ── Connection events ──────────────────────────────
+    // Connection events.
     mongoose.connection.on("disconnected", () => {
-      console.warn("⚠️  MongoDB disconnected. Attempting to reconnect...");
+      console.warn("MongoDB disconnected. Attempting to reconnect...");
     });
 
     mongoose.connection.on("reconnected", () => {
-      console.log("✅ MongoDB reconnected successfully");
+      console.log("MongoDB reconnected successfully");
     });
 
     mongoose.connection.on("error", (err) => {
-      console.error(`❌ MongoDB error: ${err.message}`);
+      console.error(`MongoDB error: ${err.message}`);
     });
 
     connectionPromise = null;
-
   } catch (error: any) {
     connectionPromise = null;
-    console.error(`❌ MongoDB connection failed: ${error.message}`);
+    console.error(`MongoDB connection failed: ${error.message}`);
     process.exit(1);
   }
 };
