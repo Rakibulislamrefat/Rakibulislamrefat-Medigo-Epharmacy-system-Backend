@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Session from "../modules/auth/Session.schema";
+import Doctor from "../modules/doctor/Doctor.schema";
 
 let connectionPromise: Promise<typeof mongoose> | null = null;
 
@@ -31,6 +32,27 @@ const connectDB = async (): Promise<void> => {
     // sessions after 15 minutes instead of refresh token expiry.
     await Session.syncIndexes();
     console.log("✅ Session indexes synchronized");
+
+    // Remove legacy `user_1` index on doctors collection if present
+    try {
+      const doctorsColl = conn.connection.db.collection("doctors");
+      const existingIndexes = await doctorsColl.indexes();
+      const hasUserIndex = existingIndexes.some((ix: any) => ix.name === "user_1");
+      if (hasUserIndex) {
+        try {
+          await doctorsColl.dropIndex("user_1");
+          console.log("✅ Dropped legacy index 'user_1' on doctors collection");
+        } catch (dropErr) {
+          console.warn("⚠️  Could not drop doctors.user_1 index:", dropErr?.message || dropErr);
+        }
+      }
+
+      // Ensure indexes defined in schema are applied
+      await Doctor.syncIndexes();
+      console.log("✅ Doctor indexes synchronized");
+    } catch (err) {
+      console.warn("⚠️  Failed to sync/drop Doctor indexes:", err?.message || err);
+    }
 
     // ── Connection events ──────────────────────────────
     mongoose.connection.on("disconnected", () => {

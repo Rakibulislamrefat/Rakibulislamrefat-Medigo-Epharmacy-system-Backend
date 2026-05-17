@@ -137,6 +137,9 @@ const DoctorSchema = new Schema(
   { timestamps: true }
 );
 
+// Ensure any user reference is unique but ignore documents without `user` (sparse)
+DoctorSchema.index({ user: 1 }, { unique: true, sparse: true });
+
 export const Doctor =
   (mongoose.models.Doctor as mongoose.Model<any>) || model("Doctor", DoctorSchema);
 
