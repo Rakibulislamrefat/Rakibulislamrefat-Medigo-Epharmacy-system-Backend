@@ -3,7 +3,13 @@ import { ApiResponse, asyncHandler } from "../../shared/utils";
 import { DoctorService } from "./doctor.service";
 
 export const createDoctor = asyncHandler(async (req: Request, res: Response) => {
-  const data = await DoctorService.create(req.body);
+  const payload = { ...req.body };
+
+  if (req.file) {
+    payload.profileImage = req.file.path;
+  }
+
+  const data = await DoctorService.create(payload);
   res.status(201).json(new ApiResponse(201, "Doctor created", data));
 });
 
@@ -18,7 +24,13 @@ export const getDoctor = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const updateDoctor = asyncHandler(async (req: Request, res: Response) => {
-  const data = await DoctorService.update(req.params.id, req.body);
+  const payload = { ...req.body };
+
+  if (req.file) {
+    payload.profileImage = req.file.path;
+  }
+
+  const data = await DoctorService.update(req.params.id, payload);
   res.status(200).json(new ApiResponse(200, "Doctor updated", data));
 });
 

@@ -16,6 +16,7 @@ import sslcommerzRoutes from "../modules/sslcommerz/sslcommerz.routes";
 import adminRoutes from "../modules/admin/admin.routes";
 import addressRoutes from "../modules/address/address.route";
 import configRoutes from "../modules/config/config.routes";
+import requestOrderRoutes from "../modules/requestOrder/requestOrder.routes";
 
 const router = Router();
 
@@ -36,5 +37,7 @@ router.use("/coupons", couponRoutes);
 router.use("/branches", branchRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/addresses", addressRoutes);
+router.use("/request-orders", requestOrderRoutes);
+router.use("/api/v1/request-orders", requestOrderRoutes);
 
 export default router;

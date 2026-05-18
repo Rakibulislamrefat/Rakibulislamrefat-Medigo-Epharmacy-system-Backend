@@ -24,6 +24,15 @@ const storage = new CloudinaryStorage({
   } as any,
 });
 
+const prescriptionStorage = new CloudinaryStorage({
+  cloudinary: cloudinary as any,
+  params: {
+    allowed_formats: ["jpg", "jpeg", "png", "webp", "pdf"],
+    folder: "medigo-prescriptions",
+    resource_type: "auto",
+  } as any,
+});
+
 // ══════════════════════════════════════════════════════
 //  File filter — images only
 // ══════════════════════════════════════════════════════
@@ -38,6 +47,20 @@ const imageFilter = (
     cb(null, true);
   } else {
     cb(new ApiError(400, "Only JPEG, PNG and WebP images are allowed") as any);
+  }
+};
+
+const prescriptionFilter = (
+  _req: Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback
+): void => {
+  const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf"];
+
+  if (allowed.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new ApiError(400, "Only JPEG, PNG, WebP and PDF prescription files are allowed") as any);
   }
 };
 
@@ -66,8 +89,35 @@ const productImage = (req: Request, res: Response, next: NextFunction): void => 
   });
 };
 
+const doctorProfileImageUploader = multer({
+  storage,
+  fileFilter: imageFilter,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+}).fields([
+  { name: "profileImage", maxCount: 1 },
+  { name: "image", maxCount: 1 },
+]);
+
+const doctorProfileImage = (req: Request, res: Response, next: NextFunction): void => {
+  doctorProfileImageUploader(req, res, (err) => {
+    if (err) return next(err);
+
+    const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+    const file = files?.profileImage?.[0] || files?.image?.[0];
+    if (file) req.file = file;
+
+    next();
+  });
+};
+
 export const upload = {
   productImage,
+  doctorProfileImage,
+  prescriptionFile: multer({
+    storage: prescriptionStorage,
+    fileFilter: prescriptionFilter,
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  }).single("prescriptionFile"),
   avatar: multer({
     storage,
     fileFilter: imageFilter,

@@ -48,6 +48,23 @@ const toStringArray = (value: unknown) => {
     .filter(Boolean);
 };
 
+const toAvailabilitySlots = (value: unknown) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return value;
+
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) return parsed;
+  } catch {
+    throw new ApiError(400, "availability must be a valid JSON array");
+  }
+
+  throw new ApiError(400, "availability must be an array");
+};
+
 const normalizeDoctorPayload = (payload: any = {}, partial = false) => {
   const normalized: Record<string, any> = {};
 
@@ -76,6 +93,7 @@ const normalizeDoctorPayload = (payload: any = {}, partial = false) => {
     normalized.qualifications = toStringArray(normalized.qualifications);
   }
   if (normalized.languages != null) normalized.languages = toStringArray(normalized.languages);
+  if (normalized.availability != null) normalized.availability = toAvailabilitySlots(normalized.availability);
   for (const field of ["experienceYears", "rating", "totalReviews", "fee"]) {
     if (normalized[field] !== undefined && normalized[field] !== "") {
       normalized[field] = Number(normalized[field]);
