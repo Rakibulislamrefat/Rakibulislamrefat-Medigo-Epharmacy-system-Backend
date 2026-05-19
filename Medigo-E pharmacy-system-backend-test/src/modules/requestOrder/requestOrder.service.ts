@@ -105,6 +105,10 @@ export class RequestOrderService {
     return { items, pagination: { total, page, limit, totalPages: totalPages(total) } };
   }
 
+  static async listForUser(query: any) {
+    return this.list(query);
+  }
+
   static async get(id: string) {
     if (!isValidId(id)) throw new ApiError(400, "Invalid request order id");
     const doc = await RequestOrder.findById(id);

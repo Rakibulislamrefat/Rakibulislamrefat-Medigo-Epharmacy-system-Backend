@@ -7,12 +7,15 @@ import {
   deleteRequestOrder,
   getRequestOrder,
   listRequestOrders,
+  listUserRequestOrders,
   updateRequestOrder,
 } from "./requestOrder.controller";
 
 const router = Router();
 
 router.post("/", upload.prescriptionFile, createRequestOrder);
+
+router.get("/user/all", protect, authorize("user"), listUserRequestOrders);
 
 router.get("/", protect, authorize("admin", "pharmacist"), listRequestOrders);
 router.get("/:id", protect, authorize("admin", "pharmacist"), getRequestOrder);

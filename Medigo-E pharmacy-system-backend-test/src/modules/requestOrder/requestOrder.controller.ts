@@ -24,6 +24,11 @@ export const listRequestOrders = asyncHandler(async (req: Request, res: Response
   res.status(200).json(new ApiResponse(200, "Request orders fetched", data));
 });
 
+export const listUserRequestOrders = asyncHandler(async (req: Request, res: Response) => {
+  const data = await RequestOrderService.listForUser(req.query);
+  res.status(200).json(new ApiResponse(200, "User request orders fetched", data));
+});
+
 export const getRequestOrder = asyncHandler(async (req: Request, res: Response) => {
   const data = await RequestOrderService.get(req.params.id);
   res.status(200).json(new ApiResponse(200, "Request order fetched", data));
