@@ -407,6 +407,55 @@ export class AuthService {
     };
   }
 
+  static async createPharmacistByAdmin(body: any, adminUserId: string, ip: string, userAgent: string) {
+    return this.createUserByAdmin(
+      {
+        ...body,
+        role: "pharmacist",
+      },
+      adminUserId,
+      ip,
+      userAgent,
+    );
+  }
+
+  static async updatePharmacistStatus(pharmacistId: string, status: "active" | "blocked" | "pending") {
+    const pharmacist = await User.findOne({
+      _id: pharmacistId,
+      role: "pharmacist",
+      isDeleted: { $ne: true },
+    });
+
+    if (!pharmacist) {
+      throw new ApiError(404, "Pharmacist not found");
+    }
+
+    pharmacist.status = status;
+    pharmacist.isActive = status !== "blocked";
+    await pharmacist.save();
+
+    if (status === "blocked") {
+      await Session.updateMany(
+        { userId: pharmacist._id, isActive: true },
+        { $set: { isActive: false, loggedOutAt: new Date() } },
+      );
+    }
+
+    return {
+      id: pharmacist._id,
+      name: pharmacist.name,
+      email: pharmacist.email,
+      phone: pharmacist.phone,
+      avatar: pharmacist.avatar,
+      role: pharmacist.role,
+      status: pharmacist.status,
+      isActive: pharmacist.isActive,
+      isEmailVerified: pharmacist.isEmailVerified,
+      isPhoneVerified: pharmacist.isPhoneVerified,
+      updatedAt: pharmacist.updatedAt,
+    };
+  }
+
   //  SEND EMAIL OTP
   // ══════════════════════════════════════════════════════
   static async sendEmailVerificationOtp(
@@ -972,6 +1021,20 @@ export class AuthService {
   //  RESET PASSWORD
   //  Hashes incoming token → finds matching user → resets
   // ══════════════════════════════════════════════════════
+  static async forgotPharmacistPassword(email: string, clientUrl: string) {
+    const pharmacist = await User.findOne({
+      email: email.toLowerCase(),
+      role: "pharmacist",
+      isDeleted: { $ne: true },
+    });
+
+    if (!pharmacist) {
+      throw new ApiError(404, "Pharmacist not found");
+    }
+
+    await this.forgotPassword(email, clientUrl);
+  }
+
   static async resetPassword(
     token: string,
     newPassword: string,

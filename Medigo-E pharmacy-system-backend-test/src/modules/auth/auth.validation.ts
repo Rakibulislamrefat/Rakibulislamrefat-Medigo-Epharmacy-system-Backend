@@ -76,6 +76,14 @@ export const adminCreateUserSchema = z.object({
   addresses: z.array(addressSchema).optional(),
 });
 
+export const adminCreatePharmacistSchema = adminCreateUserSchema.omit({ role: true }).extend({
+  status: z.enum(["active", "blocked", "pending"]).optional().default("active"),
+});
+
+export const updatePharmacistStatusSchema = z.object({
+  status: z.enum(["active", "blocked", "pending"]),
+});
+
 // ══════════════════════════════════════════════════════
 //  LOGIN
 // ══════════════════════════════════════════════════════
@@ -99,6 +107,11 @@ export const resetPasswordSchema = z.object({
   newPassword: passwordSchema,
 });
 
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: passwordSchema,
+});
+
 // ══════════════════════════════════════════════════════
 //  EMAIL OTP
 // ══════════════════════════════════════════════════════
@@ -116,8 +129,11 @@ export const verifyOtpSchema = z.object({
 // ── Inferred TypeScript types ──────────────────────────
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type AdminCreateUserInput = z.infer<typeof adminCreateUserSchema>;
+export type AdminCreatePharmacistInput = z.infer<typeof adminCreatePharmacistSchema>;
+export type UpdatePharmacistStatusInput = z.infer<typeof updatePharmacistStatusSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type SendOtpInput = z.infer<typeof sendOtpSchema>;
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;

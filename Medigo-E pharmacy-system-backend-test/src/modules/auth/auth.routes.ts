@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   uploadAvatar,
   createUserByAdmin,
+  createPharmacistByAdmin,
   register,
   login,
   adminLogin,
@@ -10,11 +11,13 @@ import {
   refreshAccessToken,
   forgotPassword,
   resetPassword,
+  sendPharmacistPasswordReset,
   sendEmailOtp,
   verifyEmailOtp,
   getAuthUser,
   updateAuthUser,
   changePassword,
+  updatePharmacistStatus,
   getMySessions,
   logoutOtherSessions,
   logoutSingleSession,
@@ -34,9 +37,12 @@ import { validate } from "../../middleware/validation.middleware";
 import {
   registerSchema,
   adminCreateUserSchema,
+  adminCreatePharmacistSchema,
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  changePasswordSchema,
+  updatePharmacistStatusSchema,
   sendOtpSchema,
   verifyOtpSchema,
 } from "./auth.validation";
@@ -92,11 +98,48 @@ router.get("/me", protect, getAuthUser);
 // POST /api/auth/create
 router.post("/create", protect, authorize("admin"), validate(adminCreateUserSchema), createUserByAdmin);
 
+// POST /api/auth/pharmacists
+router.post(
+  "/pharmacists",
+  protect,
+  authorize("admin"),
+  validate(adminCreatePharmacistSchema),
+  createPharmacistByAdmin,
+);
+
+// PATCH /api/auth/pharmacists/:id/status
+router.patch(
+  "/pharmacists/:id/status",
+  protect,
+  authorize("admin"),
+  validate(updatePharmacistStatusSchema),
+  updatePharmacistStatus,
+);
+
+// POST /api/auth/pharmacists/reset-password
+router.post(
+  "/pharmacists/reset-password",
+  protect,
+  authorize("admin"),
+  forgotPasswordLimiter,
+  validate(forgotPasswordSchema),
+  sendPharmacistPasswordReset,
+);
+
 // PATCH /api/auth/me
 router.patch("/me", protect, updateAuthUser);
 
 // POST /api/auth/change-password
-router.post("/change-password", protect, changePassword);
+router.post("/change-password", protect, validate(changePasswordSchema), changePassword);
+
+// POST /api/auth/pharmacist/change-password
+router.post(
+  "/pharmacist/change-password",
+  protect,
+  authorize("pharmacist"),
+  validate(changePasswordSchema),
+  changePassword,
+);
 
 // GET /api/auth/sessions
 router.get("/sessions", protect, getMySessions);

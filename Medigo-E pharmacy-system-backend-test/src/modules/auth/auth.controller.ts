@@ -112,6 +112,44 @@ export const createUserByAdmin = asyncHandler(async (req: Request, res: Response
     .json(new ApiResponse(201, "User created successfully", data));
 });
 
+export const createPharmacistByAdmin = asyncHandler(async (req: Request, res: Response) => {
+  const ip = extractIp(req);
+  const userAgent = req.headers["user-agent"] || "";
+
+  const data = await AuthService.createPharmacistByAdmin(
+    req.body,
+    req.user!.id,
+    ip,
+    userAgent,
+  );
+
+  res
+    .status(201)
+    .json(new ApiResponse(201, "Pharmacist created successfully", data));
+});
+
+export const updatePharmacistStatus = asyncHandler(async (req: Request, res: Response) => {
+  const data = await AuthService.updatePharmacistStatus(
+    req.params.id,
+    req.body.status,
+  );
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, "Pharmacist status updated successfully", data));
+});
+
+export const sendPharmacistPasswordReset = asyncHandler(async (req: Request, res: Response) => {
+  const { email } = req.body;
+  const clientUrl = process.env.CLIENT_URL || "";
+
+  await AuthService.forgotPharmacistPassword(email, clientUrl);
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, "Pharmacist password reset link sent successfully"));
+});
+
 //  POST /api/auth/login
 // ══════════════════════════════════════════════════════
 export const login = asyncHandler(async (req: Request, res: Response) => {
