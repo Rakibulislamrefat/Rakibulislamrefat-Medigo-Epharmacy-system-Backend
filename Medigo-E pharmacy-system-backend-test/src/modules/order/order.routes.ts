@@ -2,6 +2,7 @@ import { Router } from "express";
 import { protect } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/role.middleware";
 import {
+  cancelOrder,
   listOrders,
   trackOrder,
   updateOrder,
@@ -10,6 +11,7 @@ import {
 const router = Router();
 
 router.get("/", protect, authorize("admin", "pharmacist"), listOrders);
+router.patch("/:idOrNumber/cancel", protect, cancelOrder);
 router.get("/:idOrNumber/tracking", protect, trackOrder);
 router.patch("/:id", protect, authorize("admin", "pharmacist"), updateOrder);
 

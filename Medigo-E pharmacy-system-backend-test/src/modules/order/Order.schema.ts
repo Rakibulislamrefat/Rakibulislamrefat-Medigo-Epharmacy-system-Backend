@@ -60,6 +60,7 @@ const OrderSchema = new Schema(
     prescriptionRequired: { type: Boolean, default: false },
     prescription: { type: Types.ObjectId, ref: "Prescription", default: null },
     appliedCoupon: { type: Types.ObjectId, ref: "Coupon", default: null },
+    paymentInfo: { type: Schema.Types.Mixed, default: null },
   },
   { timestamps: true },
 );

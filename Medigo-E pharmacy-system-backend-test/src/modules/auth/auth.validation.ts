@@ -53,6 +53,29 @@ export const registerSchema = z.object({
   addresses: z.array(addressSchema).optional(),
 });
 
+export const adminCreateUserSchema = z.object({
+  name: z
+    .string({ required_error: "Name is required" })
+    .trim()
+    .min(2, "Name must be at least 2 characters")
+    .max(50),
+  email: z
+    .string({ required_error: "Email is required" })
+    .trim()
+    .email("Invalid email address")
+    .toLowerCase(),
+  phone: z
+    .string({ required_error: "Phone number is required" })
+    .trim(),
+  password: passwordSchema,
+  avatar: z.string().trim().url("Invalid avatar URL").nullable().optional(),
+  role: z.enum(["user", "admin", "pharmacist", "doctor"]).optional().default("user"),
+  status: z.enum(["active", "blocked", "pending"]).optional().default("active"),
+  isEmailVerified: z.boolean().optional().default(true),
+  isPhoneVerified: z.boolean().optional().default(false),
+  addresses: z.array(addressSchema).optional(),
+});
+
 // ══════════════════════════════════════════════════════
 //  LOGIN
 // ══════════════════════════════════════════════════════
@@ -92,6 +115,7 @@ export const verifyOtpSchema = z.object({
 
 // ── Inferred TypeScript types ──────────────────────────
 export type RegisterInput = z.infer<typeof registerSchema>;
+export type AdminCreateUserInput = z.infer<typeof adminCreateUserSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

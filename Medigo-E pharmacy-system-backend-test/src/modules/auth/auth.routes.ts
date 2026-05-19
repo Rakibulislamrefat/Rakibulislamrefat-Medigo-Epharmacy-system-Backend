@@ -1,8 +1,10 @@
 import { Router } from "express";
 import {
   uploadAvatar,
+  createUserByAdmin,
   register,
   login,
+  adminLogin,
   logout,
   refreshAccessToken,
   forgotPassword,
@@ -19,6 +21,7 @@ import {
   deleteAccount,
 } from "./auth.controller";
 import { protect } from "../../middleware/auth.middleware";
+import { authorize } from "../../middleware/role.middleware";
 import { upload } from "../../middleware/upload.middleware";
 import {
   authLimiter,
@@ -29,6 +32,7 @@ import {
 import { validate } from "../../middleware/validation.middleware";
 import {
   registerSchema,
+  adminCreateUserSchema,
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
@@ -50,6 +54,9 @@ router.post("/register", authLimiter, validate(registerSchema), register);
 
 // POST /api/auth/login
 router.post("/login", authLimiter, validate(loginSchema), login);
+
+// POST /api/auth/admin-login
+router.post("/admin-login", authLimiter, validate(loginSchema), adminLogin);
 
 // POST /api/auth/refresh-token  (uses cookie — no body needed)
 router.post("/refresh-token", refreshAccessToken);
@@ -77,6 +84,9 @@ router.post("/verify-otp", otpVerifyLimiter, validate(verifyOtpSchema), verifyEm
 
 // GET  /api/auth/me
 router.get("/me", protect, getAuthUser);
+
+// POST /api/auth/create
+router.post("/create", protect, authorize("admin"), validate(adminCreateUserSchema), createUserByAdmin);
 
 // PATCH /api/auth/me
 router.patch("/me", protect, updateAuthUser);

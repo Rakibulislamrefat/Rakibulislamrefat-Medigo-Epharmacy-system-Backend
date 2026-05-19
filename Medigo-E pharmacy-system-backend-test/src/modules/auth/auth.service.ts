@@ -336,6 +336,77 @@ export class AuthService {
   }
 
   // ══════════════════════════════════════════════════════
+  static async createUserByAdmin(body: any, adminUserId: string, ip: string, userAgent: string) {
+    const {
+      name,
+      email,
+      phone,
+      avatar,
+      password,
+      role = "user",
+      status = "active",
+      isEmailVerified = true,
+      isPhoneVerified = false,
+      addresses,
+    } = body;
+
+    const allowedRoles = ["user", "admin", "pharmacist", "doctor"];
+    if (!allowedRoles.includes(role)) {
+      throw new ApiError(400, "Invalid role");
+    }
+
+    const [emailExists, phoneExists] = await Promise.all([
+      User.findOne({ email: email.toLowerCase() }),
+      User.findOne({ phone }),
+    ]);
+    if (emailExists) throw new ApiError(409, "Email is already registered");
+    if (phoneExists) throw new ApiError(409, "Phone is already registered");
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const user = await User.create({
+      name,
+      email: email.toLowerCase(),
+      phone,
+      passwordHash,
+      avatar: avatar || "",
+      role,
+      status,
+      isVerified: Boolean(isEmailVerified),
+      isEmailVerified: Boolean(isEmailVerified),
+      isPhoneVerified: Boolean(isPhoneVerified),
+      addresses: Array.isArray(addresses) ? addresses : [],
+      lastLoginAt: null,
+    });
+
+    await UserActivity.create({
+      userId: user._id,
+      event: "register",
+      meta: {
+        role: user.role,
+        createdBy: adminUserId,
+        createdByRole: "admin",
+      },
+      ip: this.cleanIp(ip),
+      userAgent,
+      timestamp: new Date(),
+    }).catch(() => {});
+
+    return {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      avatar: user.avatar,
+      role: user.role,
+      status: (user as any).status,
+      isEmailVerified: user.isEmailVerified,
+      isPhoneVerified: user.isPhoneVerified,
+      isVerified: user.isVerified,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+
   //  SEND EMAIL OTP
   // ══════════════════════════════════════════════════════
   static async sendEmailVerificationOtp(
@@ -450,7 +521,7 @@ export class AuthService {
   //  LOGIN
   //  Supports email OR phone as identifier
   // ══════════════════════════════════════════════════════
-  static async login(body: any, ip: string, userAgent: string) {
+  static async login(body: any, ip: string, userAgent: string, allowedRoles?: string[]) {
     const { identifier, password } = body;
     const cleanedIp = this.cleanIp(ip);
 
@@ -481,6 +552,10 @@ export class AuthService {
     }
     if (status === "pending") {
       throw new ApiError(403, "Account pending approval.");
+    }
+
+    if (allowedRoles?.length && !allowedRoles.includes(user.role)) {
+      throw new ApiError(403, "Only admin can login from this endpoint");
     }
 
     const security = this.ensureSecurity(user);

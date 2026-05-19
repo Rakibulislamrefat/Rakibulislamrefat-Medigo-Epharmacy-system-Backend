@@ -96,6 +96,22 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 });
 
 // ══════════════════════════════════════════════════════
+export const createUserByAdmin = asyncHandler(async (req: Request, res: Response) => {
+  const ip = extractIp(req);
+  const userAgent = req.headers["user-agent"] || "";
+
+  const data = await AuthService.createUserByAdmin(
+    req.body,
+    req.user!.id,
+    ip,
+    userAgent,
+  );
+
+  res
+    .status(201)
+    .json(new ApiResponse(201, "User created successfully", data));
+});
+
 //  POST /api/auth/login
 // ══════════════════════════════════════════════════════
 export const login = asyncHandler(async (req: Request, res: Response) => {
@@ -114,6 +130,19 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 });
 
 // ══════════════════════════════════════════════════════
+export const adminLogin = asyncHandler(async (req: Request, res: Response) => {
+  const ip = extractIp(req);
+  const userAgent = req.headers["user-agent"] || "";
+
+  const result = await AuthService.login(req.body, ip, userAgent, ["admin"]);
+
+  res.cookie("refreshToken", result.refreshToken, cookieOptions);
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, "Admin logged in successfully", result.data));
+});
+
 //  POST /api/auth/logout
 // ══════════════════════════════════════════════════════
 export const logout = asyncHandler(async (req: Request, res: Response) => {

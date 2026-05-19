@@ -1,10 +1,11 @@
 import { Router } from "express";
-import { createOrder, getOrder, listMyOrders, trackOrder } from "../modules/order/order.controller";
+import { cancelOrder, createOrder, getOrder, listMyOrders, trackOrder } from "../modules/order/order.controller";
 
 const router = Router();
 
 router.post("/", createOrder);
 router.get("/me", listMyOrders);
+router.patch("/:idOrNumber/cancel", cancelOrder);
 router.get("/:idOrNumber/tracking", trackOrder);
 router.get("/:idOrNumber", getOrder);
 

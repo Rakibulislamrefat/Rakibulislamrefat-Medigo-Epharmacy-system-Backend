@@ -1,6 +1,7 @@
 import { ApiError } from "../../shared/utils";
 import env from "../../config/env";
 import Order from "../order/Order.schema";
+import { sendPaidOrderInvoice } from "../order/order.service";
 import PaymentTransaction from "../paymentTransaction/PaymentTransaction.schema";
 
 const SSLCommerzPayment = require("sslcommerz-lts");
@@ -141,6 +142,10 @@ export class SSLCommerzService {
     }
 
     await Promise.all([transaction.save(), order.save()]);
+
+    if (payload.status === "VALID") {
+      sendPaidOrderInvoice(order, transaction).catch(() => {});
+    }
 
     return { transaction, order };
   }

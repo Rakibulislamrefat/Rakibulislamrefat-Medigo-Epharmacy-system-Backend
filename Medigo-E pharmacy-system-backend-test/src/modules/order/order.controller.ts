@@ -37,6 +37,14 @@ export const trackOrder = asyncHandler(async (req: Request, res: Response) => {
   res.status(200).json(new ApiResponse(200, "Order tracking fetched", data));
 });
 
+export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) throw new ApiError(401, "Not authenticated");
+
+  const data = await OrderService.cancelForUser(userId, req.params.idOrNumber || req.params.id, req.body);
+  res.status(200).json(new ApiResponse(200, "Order cancelled successfully", data));
+});
+
 export const updateOrder = asyncHandler(async (req: Request, res: Response) => {
   const data = await OrderService.update(req.params.id, req.body);
   res.status(200).json(new ApiResponse(200, "Order updated", data));

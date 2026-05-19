@@ -3,9 +3,154 @@ import Order from "./Order.schema";
 import Product from "../product/Product.schema";
 import Coupon from "../coupon/Coupon.schema";
 import Cart from "../cart/Cart.schema";
-import { ApiError, paginate } from "../../shared/utils";
+import PaymentTransaction from "../paymentTransaction/PaymentTransaction.schema";
+import User from "../user/User.schema";
+import { ApiError, paginate, sendEmail } from "../../shared/utils";
 
 const isValidId = (id: string) => mongoose.Types.ObjectId.isValid(id);
+const ORDER_CANCEL_WINDOW_MS = 2 * 60 * 60 * 1000;
+const escapeHtml = (value: unknown) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const formatMoney = (value: number) => Number(value || 0).toFixed(2);
+
+const renderOrderItemsRows = (items: any[]) =>
+  items
+    .map(
+      (item) =>
+        `<tr><td>${escapeHtml(item.nameSnapshot)}</td><td align="center">${escapeHtml(item.qty)}</td><td align="right">BDT ${formatMoney(item.unitPrice)}</td><td align="right">BDT ${formatMoney(item.lineTotal)}</td></tr>`,
+    )
+    .join("");
+
+const renderAddressHtml = (address: any) => {
+  if (!address) return "";
+  const lines = [address.line1, address.line2, address.city, address.state, address.postcode, address.country].filter(Boolean);
+  return lines.map((line: string) => `<div>${escapeHtml(line)}</div>`).join("");
+};
+
+const renderAdditionalPaymentInfo = (paymentInfo: any) => {
+  if (!paymentInfo || typeof paymentInfo !== "object") return "";
+
+  const entries = Object.entries(paymentInfo).filter(
+    ([key, value]) =>
+      value != null &&
+      !["provider", "reference", "currency", "amount", "status", "createdAt", "transactionId", "method"].includes(key),
+  );
+
+  if (entries.length === 0) return "";
+
+  return `
+    <h4>Additional Payment Information</h4>
+    <table cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse; width:100%; max-width:600px; margin-top:10px;">
+      ${entries
+        .map(
+          ([key, value]) =>
+            `<tr><td><strong>${escapeHtml(String(key))}</strong></td><td>${escapeHtml(String(value))}</td></tr>`,
+        )
+        .join("")}
+    </table>
+  `;
+};
+
+const renderPaymentInfoHtml = (paymentStatus: string, transaction: any, paymentInfo: any) => {
+  if (paymentStatus !== "paid") {
+    return `<p><strong>Payment Status:</strong> ${escapeHtml(paymentStatus)}</p>`;
+  }
+
+  const details: Array<{ label: string; value: string }> = [];
+
+  if (transaction) {
+    details.push({ label: "Provider", value: transaction.provider || "N/A" });
+    details.push({ label: "Reference", value: transaction.reference || "N/A" });
+    details.push({ label: "Amount", value: `${transaction.currency || "BDT"} ${formatMoney(transaction.amount)}` });
+    details.push({ label: "Status", value: transaction.status || "N/A" });
+    details.push({ label: "Paid At", value: transaction.createdAt ? new Date(transaction.createdAt).toISOString() : "N/A" });
+  }
+
+  if (!transaction && paymentInfo) {
+    if (paymentInfo.provider) details.push({ label: "Provider", value: String(paymentInfo.provider) });
+    if (paymentInfo.reference) details.push({ label: "Reference", value: String(paymentInfo.reference) });
+    if (paymentInfo.currency || paymentInfo.amount) {
+      details.push({ label: "Amount", value: `${paymentInfo.currency || "BDT"} ${formatMoney(Number(paymentInfo.amount || 0))}` });
+    }
+    if (paymentInfo.method) details.push({ label: "Payment Method", value: String(paymentInfo.method) });
+    if (paymentInfo.transactionId) details.push({ label: "Transaction ID", value: String(paymentInfo.transactionId) });
+  }
+
+  if (details.length === 0) {
+    return `<p><strong>Payment Status:</strong> paid</p><p>Payment details are not available for this invoice.</p>`;
+  }
+
+  return `
+    <p><strong>Payment Status:</strong> paid</p>
+    <table cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse; width:100%; max-width:600px;">
+      ${details.map((detail) => `<tr><td><strong>${escapeHtml(detail.label)}</strong></td><td>${escapeHtml(detail.value)}</td></tr>`).join("")}
+    </table>
+    ${renderAdditionalPaymentInfo(paymentInfo)}
+  `;
+};
+
+const renderInvoiceHtml = (order: any, customerName: string, transaction: any) => {
+  const addressHtml = renderAddressHtml(order.deliveryAddress);
+  const itemsHtml = renderOrderItemsRows(order.items || []);
+
+  return `
+    <div style="font-family:Arial,sans-serif; color:#333; max-width:700px; margin:0 auto;">
+      <h2>Medigo Order Invoice</h2>
+      <p>Hi ${escapeHtml(customerName)},</p>
+      <p>Thank you for your order. Below is the invoice for <strong>${escapeHtml(order.orderNumber)}</strong>.</p>
+
+      <h3>Order Summary</h3>
+      <table cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse; width:100%; max-width:700px;">
+        <thead>
+          <tr style="background:#f7f7f7;"><th align="left">Item</th><th align="center">Qty</th><th align="right">Unit Price</th><th align="right">Line Total</th></tr>
+        </thead>
+        <tbody>
+          ${itemsHtml}
+        </tbody>
+      </table>
+
+      <h3>Totals</h3>
+      <table cellpadding="6" cellspacing="0" border="0" style="width:100%; max-width:700px;">
+        <tr><td>Subtotal</td><td align="right">BDT ${formatMoney(order.subtotal)}</td></tr>
+        <tr><td>Delivery Fee</td><td align="right">BDT ${formatMoney(order.deliveryFee)}</td></tr>
+        <tr><td>Discount</td><td align="right">BDT ${formatMoney(order.discountTotal)}</td></tr>
+        <tr style="font-weight:bold;"><td>Total</td><td align="right">BDT ${formatMoney(order.grandTotal)}</td></tr>
+      </table>
+
+      <h3>Delivery Details</h3>
+      <div>${escapeHtml(order.contactName || "")}</div>
+      <div>${escapeHtml(order.contactPhone || "")}</div>
+      <div>${addressHtml || "No delivery address provided."}</div>
+
+      <h3>Payment Details</h3>
+      ${renderPaymentInfoHtml(order.paymentStatus, transaction, order.paymentInfo)}
+
+      <p>If you have any questions, please contact our support team.</p>
+      <p>- Medigo Team</p>
+    </div>
+  `;
+};
+
+export const sendPaidOrderInvoice = async (order: any, transaction: any) => {
+  let user = order.user;
+  if (!user || (typeof user === "object" && !user.email)) {
+    user = await User.findById(order.user).select("name email");
+  }
+  if (!user?.email) return;
+
+  const customerName = user.name || order.contactName || "Customer";
+  await sendEmail({
+    to: user.email,
+    subject: `Medigo - Invoice for ${order.orderNumber}`,
+    html: renderInvoiceHtml(order, customerName, transaction),
+  });
+};
 
 const generateOrderNumber = () => {
   const d = new Date();
@@ -43,7 +188,7 @@ const computeCouponDiscount = async (couponId: string, subtotal: number) => {
 export class OrderService {
   static async createForUser(userId: string, payload: any) {
     if (!isValidId(userId)) throw new ApiError(400, "Invalid user id");
-    const { items, deliveryFee, contactName, contactPhone, deliveryAddress, notes, appliedCoupon, prescription, paymentStatus, status } =
+    const { items, deliveryFee, contactName, contactPhone, deliveryAddress, notes, appliedCoupon, prescription, paymentStatus, status, paymentInfo } =
       payload || {};
        console.log("Creating order with payload:", payload);
 
@@ -171,9 +316,19 @@ export class OrderService {
       prescriptionRequired,
       prescription: prescription || null,
       appliedCoupon: appliedCoupon || null,
+      paymentInfo: paymentInfo || null,
     });
 
     await Cart.findOneAndUpdate({ user: userId }, { $set: { items: [] } });
+
+    if (String(paymentStatus || "unpaid") === "paid") {
+      const [user, paymentTx] = await Promise.all([
+        User.findById(userId).select("name email"),
+        PaymentTransaction.findOne({ order: created._id, status: "success" }).sort({ createdAt: -1 }),
+      ]);
+
+      sendPaidOrderInvoice(created, paymentTx).catch(() => {});
+    }
 
     return created;
   }
@@ -264,6 +419,109 @@ export class OrderService {
         deliveryFee: order.deliveryFee,
         grandTotal: order.grandTotal,
       },
+    };
+  }
+
+  static async cancelForUser(userId: string, idOrNumber: string, payload: any = {}) {
+    if (!isValidId(userId)) throw new ApiError(400, "Invalid user id");
+
+    const filter = isValidId(idOrNumber)
+      ? { _id: idOrNumber, user: userId }
+      : { orderNumber: idOrNumber, user: userId };
+
+    const order: any = await Order.findOne(filter).populate("user", "name email");
+    if (!order) throw new ApiError(404, "Order not found for this user");
+
+    if (["cancelled", "refunded"].includes(String(order.status))) {
+      throw new ApiError(400, "Order is already cancelled");
+    }
+
+    if (["shipped", "delivered"].includes(String(order.status))) {
+      throw new ApiError(400, "Order cannot be cancelled after it has shipped");
+    }
+
+    const placedAt = new Date(order.createdAt).getTime();
+    if (Date.now() - placedAt > ORDER_CANCEL_WINDOW_MS) {
+      throw new ApiError(400, "Order can only be cancelled within 2 hours after creating it");
+    }
+
+    const refundTransaction: any = await PaymentTransaction.findOne({
+      order: order._id,
+      status: "success",
+    }).sort({ createdAt: -1 });
+
+    order.status = "cancelled";
+    if (String(order.paymentStatus) === "paid" && refundTransaction) {
+      order.paymentStatus = "refunded";
+      refundTransaction.status = "refunded";
+      refundTransaction.raw = {
+        ...(refundTransaction.raw || {}),
+        refund: {
+          reason: payload?.reason || "Order cancelled by user",
+          requestedAt: new Date(),
+        },
+      };
+      await refundTransaction.save();
+    }
+    await order.save();
+
+    const user = order.user as any;
+    const email = user?.email;
+    if (email) {
+      const customerName = user?.name || order.contactName || "Customer";
+      const reason = payload?.reason ? `<p><strong>Reason:</strong> ${escapeHtml(payload.reason)}</p>` : "";
+      const itemsHtml = (order.items || [])
+        .map((item: any) => `<li>${escapeHtml(item.nameSnapshot)} x ${item.qty} - BDT ${Number(item.lineTotal || 0).toFixed(2)}</li>`)
+        .join("");
+
+      await sendEmail({
+        to: email,
+        subject: `Medigo - Order ${order.orderNumber} cancelled`,
+        html: `
+          <h2>Order Cancelled</h2>
+          <p>Hi ${escapeHtml(customerName)},</p>
+          <p>Your order <strong>${escapeHtml(order.orderNumber)}</strong> has been cancelled successfully.</p>
+          ${reason}
+          <ul>${itemsHtml}</ul>
+          <p><strong>Total:</strong> BDT ${Number(order.grandTotal || 0).toFixed(2)}</p>
+          <p>- Medigo Team</p>
+        `,
+      }).catch(() => {});
+
+      if (refundTransaction) {
+        await sendEmail({
+          to: email,
+          subject: `Medigo - Refund information for ${order.orderNumber}`,
+          html: `
+            <h2>Payment Refund Information</h2>
+            <p>Hi ${escapeHtml(customerName)},</p>
+            <p>Your paid order <strong>${escapeHtml(order.orderNumber)}</strong> was cancelled, so the refund information is below.</p>
+            <table cellpadding="8" cellspacing="0" border="1" style="border-collapse:collapse;">
+              <tr><td><strong>Order Number</strong></td><td>${escapeHtml(order.orderNumber)}</td></tr>
+              <tr><td><strong>Payment Provider</strong></td><td>${escapeHtml(refundTransaction.provider || "N/A")}</td></tr>
+              <tr><td><strong>Transaction Reference</strong></td><td>${escapeHtml(refundTransaction.reference || "N/A")}</td></tr>
+              <tr><td><strong>Refund Amount</strong></td><td>${escapeHtml(refundTransaction.currency || "BDT")} ${Number(refundTransaction.amount || order.grandTotal || 0).toFixed(2)}</td></tr>
+              <tr><td><strong>Refund Status</strong></td><td>${escapeHtml(refundTransaction.status)}</td></tr>
+              <tr><td><strong>Requested At</strong></td><td>${new Date().toISOString()}</td></tr>
+            </table>
+            <p>Please keep this email for your records.</p>
+            <p>- Medigo Team</p>
+          `,
+        }).catch(() => {});
+      }
+    }
+
+    return {
+      order,
+      refund: refundTransaction
+        ? {
+            provider: refundTransaction.provider,
+            reference: refundTransaction.reference,
+            amount: refundTransaction.amount,
+            currency: refundTransaction.currency,
+            status: refundTransaction.status,
+          }
+        : null,
     };
   }
 
