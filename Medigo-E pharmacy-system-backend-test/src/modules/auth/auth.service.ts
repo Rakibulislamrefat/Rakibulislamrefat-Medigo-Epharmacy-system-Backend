@@ -724,15 +724,19 @@ export class AuthService {
       data: {
         accessToken,
         user: {
-          id: user._id,
+          _id: String(user._id),
           name: user.name,
           email: user.email,
           phone: user.phone,
           role: user.role,
-          avatar: user.avatar,
-          isVerified: user.isVerified,
+          avatar: user.avatar || null,
           status: (user as any).status,
+          isActive: user.isActive,
+          isEmailVerified: user.isEmailVerified,
+          isPhoneVerified: user.isPhoneVerified,
           addresses: (user as any).addresses ?? [],
+          createdAt: user.createdAt?.toISOString(),
+          updatedAt: user.updatedAt?.toISOString(),
         },
       },
     };
