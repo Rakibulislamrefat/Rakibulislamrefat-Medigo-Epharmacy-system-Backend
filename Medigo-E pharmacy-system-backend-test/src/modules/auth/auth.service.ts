@@ -412,6 +412,7 @@ export class AuthService {
       {
         ...body,
         role: "pharmacist",
+        isEmailVerified: true,
       },
       adminUserId,
       ip,
