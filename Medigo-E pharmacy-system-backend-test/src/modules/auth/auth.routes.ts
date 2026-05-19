@@ -5,6 +5,7 @@ import {
   register,
   login,
   adminLogin,
+  pharmacistLogin,
   logout,
   refreshAccessToken,
   forgotPassword,
@@ -57,6 +58,9 @@ router.post("/login", authLimiter, validate(loginSchema), login);
 
 // POST /api/auth/admin-login
 router.post("/admin-login", authLimiter, validate(loginSchema), adminLogin);
+
+// POST /api/auth/pharmacist-login
+router.post("/pharmacist-login", authLimiter, validate(loginSchema), pharmacistLogin);
 
 // POST /api/auth/refresh-token  (uses cookie — no body needed)
 router.post("/refresh-token", refreshAccessToken);

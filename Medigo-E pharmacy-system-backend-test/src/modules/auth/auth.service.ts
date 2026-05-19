@@ -555,7 +555,10 @@ export class AuthService {
     }
 
     if (allowedRoles?.length && !allowedRoles.includes(user.role)) {
-      throw new ApiError(403, "Only admin can login from this endpoint");
+      const allowedText = allowedRoles.length === 1
+        ? allowedRoles[0]
+        : `${allowedRoles.slice(0, -1).join(", ")} or ${allowedRoles.slice(-1)}`;
+      throw new ApiError(403, `Only ${allowedText} can login from this endpoint`);
     }
 
     const security = this.ensureSecurity(user);

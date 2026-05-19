@@ -143,8 +143,22 @@ export const adminLogin = asyncHandler(async (req: Request, res: Response) => {
     .json(new ApiResponse(200, "Admin logged in successfully", result.data));
 });
 
-//  POST /api/auth/logout
 // ══════════════════════════════════════════════════════
+export const pharmacistLogin = asyncHandler(async (req: Request, res: Response) => {
+  const ip = extractIp(req);
+  const userAgent = req.headers["user-agent"] || "";
+
+  const result = await AuthService.login(req.body, ip, userAgent, ["pharmacist"]);
+
+  res.cookie("refreshToken", result.refreshToken, cookieOptions);
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, "Pharmacist logged in successfully", result.data));
+});
+
+//  POST /api/auth/logout
+// ══════════════════════════════════════════════════════════════
 export const logout = asyncHandler(async (req: Request, res: Response) => {
   const ip        = extractIp(req);
   const userAgent = req.headers["user-agent"] || "";
