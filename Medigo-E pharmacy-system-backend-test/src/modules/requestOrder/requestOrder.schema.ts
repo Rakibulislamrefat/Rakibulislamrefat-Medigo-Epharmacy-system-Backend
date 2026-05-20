@@ -73,10 +73,6 @@ const RequestOrderSchema = new Schema(
       default: "",
       trim: true,
     },
-    prescriptionUrl: {
-      type: String,
-      default: null,
-    },
     items: {
       type: [RequestOrderItemSchema],
       default: [],

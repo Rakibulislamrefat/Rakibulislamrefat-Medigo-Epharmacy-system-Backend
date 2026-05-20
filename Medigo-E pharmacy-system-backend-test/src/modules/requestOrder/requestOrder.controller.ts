@@ -11,10 +11,6 @@ export const createRequestOrder = asyncHandler(async (req: Request, res: Respons
     },
   };
 
-  if (req.file) {
-    payload.prescriptionUrl = req.file.path;
-  }
-
   const data = await RequestOrderService.create(payload);
   res.status(201).json(new ApiResponse(201, "Request order created", data));
 });
@@ -36,10 +32,6 @@ export const getRequestOrder = asyncHandler(async (req: Request, res: Response) 
 
 export const updateRequestOrder = asyncHandler(async (req: Request, res: Response) => {
   const payload = { ...req.body };
-
-  if (req.file) {
-    payload.prescriptionUrl = req.file.path;
-  }
 
   const data = await RequestOrderService.update(req.params.id, payload);
   res.status(200).json(new ApiResponse(200, "Request order updated", data));

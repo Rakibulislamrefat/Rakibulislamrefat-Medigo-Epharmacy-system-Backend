@@ -11,7 +11,6 @@ const REQUEST_ORDER_FIELDS = [
   "city",
   "country",
   "deliveryNotes",
-  "prescriptionUrl",
   "items",
   "status",
   "meta",
@@ -50,7 +49,6 @@ const normalizeRequestOrderPayload = (payload: any = {}, partial = false) => {
     "city",
     "country",
     "deliveryNotes",
-    "prescriptionUrl",
     "status",
   ]) {
     if (typeof normalized[field] === "string") normalized[field] = normalized[field].trim();
