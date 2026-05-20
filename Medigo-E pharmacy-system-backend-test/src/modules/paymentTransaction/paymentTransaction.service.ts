@@ -36,7 +36,7 @@ export class PaymentTransactionService {
     const filter: any = { user: userId };
     if (query?.status) filter.status = query.status;
     const [items, total] = await Promise.all([
-      PaymentTransaction.find(filter).populate("order").skip(skip).limit(limit).sort({ createdAt: -1 }),
+      PaymentTransaction.find(filter).populate("order prescriptionOrder").skip(skip).limit(limit).sort({ createdAt: -1 }),
       PaymentTransaction.countDocuments(filter),
     ]);
     return { items, pagination: { total, page, limit, totalPages: totalPages(total) } };
@@ -47,9 +47,12 @@ export class PaymentTransactionService {
     const filter: any = {};
     if (query?.status) filter.status = query.status;
     if (query?.order && isValidId(String(query.order))) filter.order = query.order;
+    if (query?.prescriptionOrder && isValidId(String(query.prescriptionOrder))) {
+      filter.prescriptionOrder = query.prescriptionOrder;
+    }
     if (query?.user && isValidId(String(query.user))) filter.user = query.user;
     const [items, total] = await Promise.all([
-      PaymentTransaction.find(filter).populate("order user").skip(skip).limit(limit).sort({ createdAt: -1 }),
+      PaymentTransaction.find(filter).populate("order prescriptionOrder user").skip(skip).limit(limit).sort({ createdAt: -1 }),
       PaymentTransaction.countDocuments(filter),
     ]);
     return { items, pagination: { total, page, limit, totalPages: totalPages(total) } };
@@ -57,7 +60,7 @@ export class PaymentTransactionService {
 
   static async get(id: string) {
     if (!isValidId(id)) throw new ApiError(400, "Invalid payment transaction id");
-    const doc = await PaymentTransaction.findById(id).populate("order user");
+    const doc = await PaymentTransaction.findById(id).populate("order prescriptionOrder user");
     if (!doc) throw new ApiError(404, "Payment transaction not found");
     return doc;
   }

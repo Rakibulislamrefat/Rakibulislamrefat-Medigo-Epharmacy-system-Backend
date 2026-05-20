@@ -10,10 +10,12 @@ import {
   getPrescriptionOrder,
   listMyPrescriptionOrders,
   listPrescriptionOrders,
+  payPrescriptionOrder,
   updatePrescriptionOrder,
 } from "./prescriptionOrder.controller";
 import {
   createPrescriptionOrderSchema,
+  prescriptionOrderPaymentSchema,
   updatePrescriptionOrderSchema,
 } from "./prescriptionOrder.validation";
 
@@ -31,6 +33,12 @@ router.post(
 
 router.get("/my", authorize("user"), listMyPrescriptionOrders);
 router.get("/my/:id", authorize("user"), getMyPrescriptionOrder);
+router.post(
+  "/:id/payment",
+  authorize("user"),
+  validate(prescriptionOrderPaymentSchema),
+  payPrescriptionOrder,
+);
 
 router.get("/", authorize("admin", "pharmacist"), listPrescriptionOrders);
 router.get("/:id", authorize("admin", "pharmacist"), getPrescriptionOrder);

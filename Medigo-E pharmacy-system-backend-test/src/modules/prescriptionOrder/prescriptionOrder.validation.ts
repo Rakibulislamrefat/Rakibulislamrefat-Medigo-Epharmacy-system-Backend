@@ -109,6 +109,15 @@ const quantitiesSchema = z.preprocess((value) => {
   z.array(z.coerce.number().int().min(1)),
 ]).optional().default({}));
 
+export const prescriptionOrderPaymentSchema = z
+  .object({
+    method: z.enum(["cash_on_delivery", "online"], {
+      required_error: "Payment method is required",
+    }),
+    customerInfo: z.record(z.any()).optional().default({}),
+  })
+  .strict();
+
 export const createPrescriptionOrderSchema = z
   .object({
     userId: z.string().optional(),
@@ -195,3 +204,4 @@ export const updatePrescriptionOrderSchema = z
 
 export type CreatePrescriptionOrderInput = z.infer<typeof createPrescriptionOrderSchema>;
 export type UpdatePrescriptionOrderInput = z.infer<typeof updatePrescriptionOrderSchema>;
+export type PrescriptionOrderPaymentInput = z.infer<typeof prescriptionOrderPaymentSchema>;

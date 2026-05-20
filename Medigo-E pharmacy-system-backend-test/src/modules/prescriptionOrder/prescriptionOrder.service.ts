@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Product from "../product/Product.schema";
 import User from "../user/User.schema";
+import PaymentTransaction from "../paymentTransaction/PaymentTransaction.schema";
 import PrescriptionOrder from "./prescriptionOrder.schema";
 import { ApiError, paginate } from "../../shared/utils";
 
@@ -50,6 +51,24 @@ const normalizePayload = (payload: any = {}, partial = false) => {
 };
 
 const populatePrescriptionOrder = (query: any) => query;
+
+export const calculatePrescriptionOrderAmount = (order: any) =>
+  (order?.medicines || []).reduce((total: number, medicine: any) => {
+    const unitPrice = Number(medicine.salePrice ?? medicine.price ?? 0);
+    const quantity = Math.max(Number(medicine.quantity || 1), 1);
+    return total + unitPrice * quantity;
+  }, 0);
+
+const generateCodReference = (orderId: string) => {
+  const now = new Date();
+  const date = now.toLocaleDateString("en-GB").replace(/\//g, "");
+  const time = now
+    .toLocaleTimeString("en-GB", { hour12: false })
+    .replace(/:/g, "")
+    .slice(0, 6);
+
+  return `PRESCRIPTION-COD-${date}-${time}-${String(orderId).slice(-6)}`;
+};
 
 const buildUserSnapshot = async (userId: string) => {
   if (!isValidId(userId)) throw new ApiError(400, "Invalid user id");
@@ -183,5 +202,54 @@ export class PrescriptionOrderService {
     const doc = await PrescriptionOrder.findByIdAndDelete(id);
     if (!doc) throw new ApiError(404, "Prescription order not found");
     return doc;
+  }
+
+  static async selectCashOnDeliveryPayment(userId: string, id: string) {
+    if (!isValidId(userId)) throw new ApiError(400, "Invalid user id");
+    if (!isValidId(id)) throw new ApiError(400, "Invalid prescription order id");
+
+    const order: any = await PrescriptionOrder.findOne({ _id: id, "user.userId": userId });
+    if (!order) throw new ApiError(404, "Prescription order not found");
+    if (order.status !== "confirmed") {
+      throw new ApiError(400, "Payment is allowed only after prescription order is confirmed");
+    }
+    if (order.paymentStatus === "paid") throw new ApiError(400, "Prescription order is already paid");
+
+    const amount = calculatePrescriptionOrderAmount(order);
+    if (amount <= 0) throw new ApiError(400, "Prescription order amount must be greater than zero");
+
+    const reference = generateCodReference(id);
+    const transaction = await (PaymentTransaction as any).create({
+      prescriptionOrder: id,
+      user: userId,
+      provider: "cash_on_delivery",
+      amount,
+      currency: "BDT",
+      status: "initiated",
+      reference,
+      raw: {
+        method: "cash_on_delivery",
+        confirmation: "Cash on delivery selected",
+      },
+    });
+
+    order.paymentMethod = "cash_on_delivery";
+    order.paymentStatus = "cod_pending";
+    order.paymentInfo = {
+      provider: "cash_on_delivery",
+      method: "cash_on_delivery",
+      amount,
+      currency: "BDT",
+      reference,
+      transactionId: String(transaction._id),
+      confirmedAt: new Date(),
+    };
+    await order.save();
+
+    return {
+      message: "Cash on delivery payment confirmed",
+      order,
+      transaction,
+    };
   }
 }

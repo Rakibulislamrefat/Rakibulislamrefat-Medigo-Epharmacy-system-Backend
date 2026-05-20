@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { ApiError, ApiResponse, asyncHandler } from "../../shared/utils";
 import { PrescriptionOrderService } from "./prescriptionOrder.service";
+import { SSLCommerzService } from "../sslcommerz/sslcommerz.service";
 
 const getUserId = (req: Request) => {
   const userId = req.user?.id;
@@ -45,6 +46,18 @@ export const updatePrescriptionOrder = asyncHandler(async (req: Request, res: Re
 
   const data = await PrescriptionOrderService.update(req.params.id, payload);
   res.status(200).json(new ApiResponse(200, "Prescription order updated", data));
+});
+
+export const payPrescriptionOrder = asyncHandler(async (req: Request, res: Response) => {
+  const userId = getUserId(req);
+  const { method, customerInfo } = req.body;
+
+  const data =
+    method === "cash_on_delivery"
+      ? await PrescriptionOrderService.selectCashOnDeliveryPayment(userId, req.params.id)
+      : await SSLCommerzService.initiatePrescriptionPayment(req.params.id, customerInfo || {}, userId);
+
+  res.status(200).json(new ApiResponse(200, "Prescription order payment confirmed", data));
 });
 
 export const deletePrescriptionOrder = asyncHandler(async (req: Request, res: Response) => {

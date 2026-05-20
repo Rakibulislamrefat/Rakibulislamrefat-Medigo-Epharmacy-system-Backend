@@ -7,6 +7,9 @@ export type PrescriptionOrderStatus =
   | "delivered"
   | "cancelled";
 
+export type PrescriptionOrderPaymentStatus = "unpaid" | "paid" | "failed" | "cod_pending";
+export type PrescriptionOrderPaymentMethod = "cash_on_delivery" | "online";
+
 const PrescriptionOrderSchema = new Schema(
   {
     prescriptionFile: {
@@ -61,6 +64,18 @@ const PrescriptionOrderSchema = new Schema(
       default: "pending",
       index: true,
     },
+    paymentStatus: {
+      type: String,
+      enum: ["unpaid", "paid", "failed", "cod_pending"],
+      default: "unpaid",
+      index: true,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ["cash_on_delivery", "online", null],
+      default: null,
+    },
+    paymentInfo: { type: Schema.Types.Mixed, default: null },
   },
   { timestamps: true },
 );
