@@ -83,6 +83,32 @@ const RequestOrderSchema = new Schema(
       default: "pending",
       index: true,
     },
+    paymentMethod: {
+      type: String,
+      enum: ["sslcommerz", "cod"],
+      default: null,
+      index: true,
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["pending", "completed", "failed"],
+      default: "pending",
+    },
+    totalAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    pharmacistNotes: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    transactionId: {
+      type: String,
+      default: null,
+      index: true,
+    },
     meta: {
       ip: { type: String, default: "" },
       userAgent: { type: String, default: "" },

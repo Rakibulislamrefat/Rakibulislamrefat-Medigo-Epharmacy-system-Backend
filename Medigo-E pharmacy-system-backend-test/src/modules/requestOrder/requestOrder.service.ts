@@ -14,6 +14,11 @@ const REQUEST_ORDER_FIELDS = [
   "items",
   "status",
   "meta",
+  "paymentMethod",
+  "paymentStatus",
+  "totalAmount",
+  "pharmacistNotes",
+  "transactionId",
 ];
 
 const isValidId = (id: string) => mongoose.Types.ObjectId.isValid(id);
@@ -130,5 +135,81 @@ export class RequestOrderService {
     const doc = await RequestOrder.findByIdAndDelete(id);
     if (!doc) throw new ApiError(404, "Request order not found");
     return doc;
+  }
+
+  static async updatePayment(id: string, payload: any) {
+    if (!isValidId(id)) throw new ApiError(400, "Invalid request order id");
+    
+    const doc = await RequestOrder.findById(id);
+    if (!doc) throw new ApiError(404, "Request order not found");
+
+    const { method, paymentMethod, orderId, status, pharmacistNotes, customerInfo, items, totalAmount } = payload;
+
+    // Validate payment method
+    if (method && !["online", "cash_on_delivery"].includes(method)) {
+      throw new ApiError(400, "Invalid payment method. Must be 'online' or 'cash_on_delivery'");
+    }
+
+    if (paymentMethod && !["sslcommerz", "cod"].includes(paymentMethod)) {
+      throw new ApiError(400, "Invalid paymentMethod. Must be 'sslcommerz' or 'cod'");
+    }
+
+    // Validate required payment fields
+    if (!totalAmount || totalAmount <= 0) {
+      throw new ApiError(400, "totalAmount is required and must be greater than 0");
+    }
+
+    // Update document with payment information
+    const updateData: any = {
+      paymentMethod: paymentMethod || method === "online" ? "sslcommerz" : "cod",
+      totalAmount,
+      paymentStatus: "pending",
+    };
+
+    if (status) updateData.status = status;
+    if (pharmacistNotes) updateData.pharmacistNotes = pharmacistNotes;
+    if (items) updateData.items = parseItems(items);
+
+    const updatedDoc = await RequestOrder.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    return updatedDoc;
+  }
+
+  static async initiateSSLCommerzPayment(id: string, payload: any) {
+    if (!isValidId(id)) throw new ApiError(400, "Invalid request order id");
+    
+    const doc = await RequestOrder.findById(id);
+    if (!doc) throw new ApiError(404, "Request order not found");
+
+    const { paymentMethod, totalAmount, customerInfo } = payload;
+
+    if (paymentMethod !== "sslcommerz") {
+      throw new ApiError(400, "Payment method must be sslcommerz for this endpoint");
+    }
+
+    if (!totalAmount || totalAmount <= 0) {
+      throw new ApiError(400, "Valid totalAmount is required");
+    }
+
+    if (!customerInfo?.email || !customerInfo?.phone) {
+      throw new ApiError(400, "Customer email and phone are required");
+    }
+
+    // SSLCommerz integration would be done in the controller/routes
+    // This service method validates and prepares the data
+    return {
+      orderId: id,
+      amount: totalAmount,
+      customer: {
+        name: customerInfo.name || doc.fullName,
+        email: customerInfo.email,
+        phone: customerInfo.phone,
+      },
+      ready: true,
+    };
   }
 }
