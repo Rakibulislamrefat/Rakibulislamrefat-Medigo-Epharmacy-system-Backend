@@ -5,8 +5,8 @@ import PaymentTransaction from "../paymentTransaction/PaymentTransaction.schema"
 import PrescriptionOrder from "./prescriptionOrder.schema";
 import { ApiError, paginate } from "../../shared/utils";
 
-const PRESCRIPTION_ORDER_STATUSES = ["pending", "confirmed", "processing", "delivered", "cancelled"];
-const PRESCRIPTION_ORDER_FIELDS = ["prescriptionFile", "user", "address", "medicines", "notes", "status"];
+const PRESCRIPTION_ORDER_STATUSES = ["pending_ocr", "pending_verification", "verified", "confirmed", "processing", "delivered", "cancelled", "rejected"];
+const PRESCRIPTION_ORDER_FIELDS = ["prescriptionFile", "user", "address", "medicines", "notes", "status", "extractedText", "ocrProcessedAt", "verifiedBy", "verifiedAt", "verificationNotes"];
 
 const isValidId = (id: string) => mongoose.Types.ObjectId.isValid(id);
 

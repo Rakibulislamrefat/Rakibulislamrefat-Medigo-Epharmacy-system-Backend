@@ -1,11 +1,14 @@
 import mongoose, { Schema, model, Types } from "mongoose";
 
 export type PrescriptionOrderStatus =
-  | "pending"
+  | "pending_ocr"
+  | "pending_verification"
+  | "verified"
   | "confirmed"
   | "processing"
   | "delivered"
-  | "cancelled";
+  | "cancelled"
+  | "rejected";
 
 export type PrescriptionOrderPaymentStatus = "unpaid" | "paid" | "failed" | "cod_pending";
 export type PrescriptionOrderPaymentMethod = "cash_on_delivery" | "online";
@@ -16,6 +19,28 @@ const PrescriptionOrderSchema = new Schema(
       type: String,
       required: true,
       trim: true,
+    },
+    // OCR fields
+    extractedText: {
+      type: String,
+      default: "",
+    },
+    ocrProcessedAt: {
+      type: Date,
+      default: null,
+    },
+    verifiedBy: {
+      type: Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    verifiedAt: {
+      type: Date,
+      default: null,
+    },
+    verificationNotes: {
+      type: String,
+      default: "",
     },
     user: {
       userId: { type: Types.ObjectId, ref: "User", required: true, index: true },
@@ -60,8 +85,8 @@ const PrescriptionOrderSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "confirmed", "processing", "delivered", "cancelled"],
-      default: "pending",
+      enum: ["pending_ocr", "pending_verification", "verified", "confirmed", "processing", "delivered", "cancelled", "rejected"],
+      default: "pending_ocr",
       index: true,
     },
     paymentStatus: {

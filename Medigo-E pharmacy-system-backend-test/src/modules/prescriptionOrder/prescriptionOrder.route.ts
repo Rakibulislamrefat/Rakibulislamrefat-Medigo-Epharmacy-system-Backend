@@ -12,6 +12,9 @@ import {
   listPrescriptionOrders,
   payPrescriptionOrder,
   updatePrescriptionOrder,
+  uploadAndProcessPrescription,
+  verifyPrescription,
+  getPrescriptionOCRDetails,
 } from "./prescriptionOrder.controller";
 import {
   createPrescriptionOrderSchema,
@@ -22,6 +25,25 @@ import {
 const router = Router();
 
 router.use(protect);
+
+// OCR Upload endpoint - users can upload prescriptions for OCR processing
+router.post(
+  "/ocr/upload",
+  authorize("user"),
+  upload.prescriptionFile,
+  validate(createPrescriptionOrderSchema),
+  uploadAndProcessPrescription,
+);
+
+// Get OCR details for a specific prescription
+router.get("/ocr/:id", getPrescriptionOCRDetails);
+
+// Pharmacist verification endpoint - verify and edit extracted medicines
+router.put(
+  "/verify/:id",
+  authorize("admin", "pharmacist"),
+  verifyPrescription,
+);
 
 router.post(
   "/",
