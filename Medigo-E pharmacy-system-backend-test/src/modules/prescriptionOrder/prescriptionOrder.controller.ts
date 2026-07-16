@@ -10,13 +10,65 @@ const getUserId = (req: Request) => {
   return userId;
 };
 
+const processPrescriptionOCR = async (prescriptionId: string, filePath: string) => {
+  try {
+    const extractedText = await OCRService.extractTextFromPrescription(filePath);
+    const suggestedMedicines = await OCRService.matchMedicinesFromText(extractedText);
+
+    return PrescriptionOrderService.update(prescriptionId, {
+      extractedText,
+      suggestedMedicines,
+      ocrProcessedAt: new Date(),
+      status: "pending_verification",
+      pharmacistNotes: "",
+    });
+  } catch (error) {
+    console.error("OCR processing error:", error);
+
+    return PrescriptionOrderService.update(prescriptionId, {
+      extractedText: "",
+      suggestedMedicines: [],
+      ocrProcessedAt: new Date(),
+      status: "pending_verification",
+      pharmacistNotes: "OCR failed or no readable text found. Manual review required.",
+    });
+  }
+};
+
+const extractPrescriptionPayload = (req: Request) => {
+  const body = { ...(req.body || {}) };
+
+  if (typeof body.user === "string") {
+    try {
+      body.user = JSON.parse(body.user);
+    } catch {
+      body.user = { name: "", email: "", phone: "" };
+    }
+  }
+
+  if (typeof body.address === "string") {
+    try {
+      body.address = JSON.parse(body.address);
+    } catch {
+      body.address = { line1: "", city: "", country: "" };
+    }
+  }
+
+  return body;
+};
+
 export const createPrescriptionOrder = asyncHandler(async (req: Request, res: Response) => {
   if (!req.file?.path) throw new ApiError(400, "prescriptionFile is required");
 
-  const data = await PrescriptionOrderService.createForUser(getUserId(req), {
-    ...req.body,
+  const payload = extractPrescriptionPayload(req);
+
+  const prescription = await PrescriptionOrderService.createForUser(getUserId(req), {
+    ...payload,
     prescriptionFile: req.file.path,
+    status: "pending_ocr",
   });
+
+  const data = await processPrescriptionOCR(prescription._id.toString(), req.file.path);
 
   res.status(201).json(new ApiResponse(201, "Prescription order created", data));
 });
@@ -74,10 +126,11 @@ export const uploadAndProcessPrescription = asyncHandler(async (req: Request, re
   if (!req.file?.path) throw new ApiError(400, "prescriptionFile is required");
 
   const userId = getUserId(req);
+  const payload = extractPrescriptionPayload(req);
   
   // Create prescription order with pending_ocr status
   const prescription = await PrescriptionOrderService.createForUser(userId, {
-    ...req.body,
+    ...payload,
     prescriptionFile: req.file.path,
     status: "pending_ocr",
   });
@@ -86,23 +139,9 @@ export const uploadAndProcessPrescription = asyncHandler(async (req: Request, re
     // Process OCR in background, but don't block the response
     setImmediate(async () => {
       try {
-        const extractedText = await OCRService.extractTextFromPrescription(req.file!.path);
-        const suggestedMedicines = OCRService.parseMedicinesFromText(extractedText);
-        const { isValid, confidence } = OCRService.validateExtractionQuality(extractedText);
-
-        // Update prescription with OCR results
-        await PrescriptionOrderService.update(prescription._id.toString(), {
-          extractedText,
-          ocrProcessedAt: new Date(),
-          status: "pending_verification",
-        });
+        await processPrescriptionOCR(prescription._id.toString(), req.file!.path);
       } catch (error) {
         console.error("OCR processing error:", error);
-        // Mark as failed but don't crash the response
-        await PrescriptionOrderService.update(prescription._id.toString(), {
-          status: "pending_verification", // Let pharmacist review manually
-          extractedText: `[OCR failed - Manual review required]`,
-        });
       }
     });
 
@@ -173,11 +212,12 @@ export const getPrescriptionOCRDetails = asyncHandler(async (req: Request, res: 
       prescriptionId: prescription._id,
       status: prescription.status,
       extractedText: prescription.extractedText,
-      suggestedMedicines: prescription.medicines,
+      suggestedMedicines: prescription.suggestedMedicines || [],
       ocrProcessedAt: prescription.ocrProcessedAt,
       verificationStatus: prescription.verifiedAt ? "verified" : "pending",
       verifiedBy: prescription.verifiedBy,
       verificationNotes: prescription.verificationNotes,
+      pharmacistNotes: prescription.pharmacistNotes,
     })
   );
 });

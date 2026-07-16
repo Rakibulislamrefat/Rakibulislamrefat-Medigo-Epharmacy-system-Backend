@@ -6,7 +6,21 @@ import PrescriptionOrder from "./prescriptionOrder.schema";
 import { ApiError, paginate } from "../../shared/utils";
 
 const PRESCRIPTION_ORDER_STATUSES = ["pending_ocr", "pending_verification", "verified", "confirmed", "processing", "delivered", "cancelled", "rejected"];
-const PRESCRIPTION_ORDER_FIELDS = ["prescriptionFile", "user", "address", "medicines", "notes", "status", "extractedText", "ocrProcessedAt", "verifiedBy", "verifiedAt", "verificationNotes"];
+const PRESCRIPTION_ORDER_FIELDS = [
+  "prescriptionFile",
+  "user",
+  "address",
+  "medicines",
+  "suggestedMedicines",
+  "notes",
+  "status",
+  "extractedText",
+  "ocrProcessedAt",
+  "verifiedBy",
+  "verifiedAt",
+  "verificationNotes",
+  "pharmacistNotes",
+];
 
 const isValidId = (id: string) => mongoose.Types.ObjectId.isValid(id);
 
@@ -25,6 +39,12 @@ const normalizePayload = (payload: any = {}, partial = false) => {
     if (!partial) normalized.medicines = [];
   } else if (!Array.isArray(normalized.medicines)) {
     throw new ApiError(400, "medicines must be an array");
+  }
+
+  if (normalized.suggestedMedicines === undefined) {
+    if (!partial) normalized.suggestedMedicines = [];
+  } else if (!Array.isArray(normalized.suggestedMedicines)) {
+    throw new ApiError(400, "suggestedMedicines must be an array");
   }
 
   if (!partial) {

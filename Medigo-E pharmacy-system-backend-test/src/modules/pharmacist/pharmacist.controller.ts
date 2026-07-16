@@ -14,7 +14,20 @@ const getPharmacistId = (req: Request) => {
 export const getDashboardStats = asyncHandler(async (req: Request, res: Response) => {
   const pharmacistId = getPharmacistId(req);
   const stats = await PharmacistService.getDashboardStats(pharmacistId);
-  res.status(200).json(new ApiResponse(200, "Dashboard stats fetched", stats));
+  res.status(200).json(new ApiResponse(200, "Dashboard loaded successfully", {
+    totalOrdersToday: stats.totalOrdersToday,
+    pendingVerification: stats.pendingVerification,
+    verifiedToday: stats.verifiedToday,
+    ordersReady: stats.ordersReady,
+    recentOrders: (stats.recentOrders || []).map((order: any) => ({
+      _id: order._id,
+      customerName: order.user?.name || "",
+      customerPhone: order.user?.phone || "",
+      status: order.status,
+      suggestedMedicines: order.medicines || [],
+      createdAt: order.createdAt,
+    })),
+  }));
 });
 
 /**
@@ -25,11 +38,11 @@ export const getRequestedOrders = asyncHandler(async (req: Request, res: Respons
 
   const result = await PharmacistService.getRequestedOrders(
     String(status),
-    Number(page),
-    Number(limit)
+    Number(page) || 1,
+    Number(limit) || 10
   );
 
-  res.status(200).json(new ApiResponse(200, "Requested orders fetched", result));
+  res.status(200).json(new ApiResponse(200, "Requested orders loaded successfully", result.items));
 });
 
 /**
@@ -38,7 +51,7 @@ export const getRequestedOrders = asyncHandler(async (req: Request, res: Respons
 export const getPrescriptionOrder = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const prescription = await PharmacistService.getPrescriptionOrder(id);
-  res.status(200).json(new ApiResponse(200, "Prescription fetched", prescription));
+  res.status(200).json(new ApiResponse(200, "Order details loaded successfully", prescription));
 });
 
 /**
@@ -56,7 +69,7 @@ export const verifyPrescription = asyncHandler(async (req: Request, res: Respons
     verificationNotes
   );
 
-  res.status(200).json(new ApiResponse(200, "Prescription verified", updated));
+  res.status(200).json(new ApiResponse(200, "Order verified successfully", updated));
 });
 
 /**
@@ -73,7 +86,7 @@ export const rejectPrescription = asyncHandler(async (req: Request, res: Respons
 
   const updated = await PharmacistService.rejectPrescription(id, pharmacistId, reason);
 
-  res.status(200).json(new ApiResponse(200, "Prescription rejected", updated));
+  res.status(200).json(new ApiResponse(200, "Order rejected successfully", updated));
 });
 
 /**
@@ -84,11 +97,11 @@ export const getPrescribedOrders = asyncHandler(async (req: Request, res: Respon
 
   const result = await PharmacistService.getPrescribedOrders(
     status ? String(status) : undefined,
-    Number(page),
-    Number(limit)
+    Number(page) || 1,
+    Number(limit) || 10
   );
 
-  res.status(200).json(new ApiResponse(200, "Prescribed orders fetched", result));
+  res.status(200).json(new ApiResponse(200, "Prescribed orders loaded successfully", result.items));
 });
 
 /**
@@ -97,7 +110,7 @@ export const getPrescribedOrders = asyncHandler(async (req: Request, res: Respon
 export const getOrder = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const order = await PharmacistService.getOrder(id);
-  res.status(200).json(new ApiResponse(200, "Order fetched", order));
+  res.status(200).json(new ApiResponse(200, "Order details loaded successfully", order));
 });
 
 /**
@@ -116,7 +129,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
     status as "picked" | "packed" | "ready_for_delivery" | "delivered"
   );
 
-  res.status(200).json(new ApiResponse(200, "Order status updated", updated));
+  res.status(200).json(new ApiResponse(200, "Order status updated successfully", updated));
 });
 
 /**
@@ -125,7 +138,11 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
 export const generateInvoice = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const result = await PharmacistService.generateInvoice(id);
-  res.status(200).json(new ApiResponse(200, "Invoice generated", result));
+  const invoiceUrl = (result as any)?.invoiceUrl || (result as any)?.invoiceData?.invoiceUrl || "";
+
+  res.status(200).json(new ApiResponse(200, "Invoice generated successfully", {
+    invoiceUrl,
+  }));
 });
 
 /**

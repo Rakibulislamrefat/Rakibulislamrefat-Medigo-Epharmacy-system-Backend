@@ -121,6 +121,19 @@ export const prescriptionOrderPaymentSchema = z
 export const createPrescriptionOrderSchema = z
   .object({
     userId: z.string().optional(),
+    user: z.preprocess((value) => {
+      if (typeof value !== "string") return value;
+
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }, z.object({
+      name: z.string().trim().optional(),
+      email: z.string().trim().optional(),
+      phone: z.string().trim().optional(),
+    }).optional()),
     name: z.string().optional(),
     email: z.string().optional(),
     phone: z.string().optional(),
@@ -136,9 +149,15 @@ export const createPrescriptionOrderSchema = z
     medicines: medicinesSchema,
     quantities: quantitiesSchema,
     notes: optionalTrimmedString,
+    prescription: z.any().optional(),
   })
   .strict()
   .transform((value) => ({
+    user: value.user || {
+      name: value.name || "",
+      email: value.email || "",
+      phone: value.phone || "",
+    },
     address: value.address || {
       line1: value.line1 || "",
       line2: value.line2,

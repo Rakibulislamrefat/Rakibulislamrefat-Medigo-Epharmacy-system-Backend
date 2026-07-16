@@ -110,14 +110,29 @@ const doctorProfileImage = (req: Request, res: Response, next: NextFunction): vo
   });
 };
 
+const prescriptionUpload = multer({
+  storage: prescriptionStorage,
+  fileFilter: prescriptionFilter,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+});
+
 export const upload = {
   productImage,
   doctorProfileImage,
-  prescriptionFile: multer({
-    storage: prescriptionStorage,
-    fileFilter: prescriptionFilter,
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-  }).single("prescriptionFile"),
+  prescriptionFile: (req: Request, res: Response, next: NextFunction): void => {
+    prescriptionUpload.fields([
+      { name: "prescriptionFile", maxCount: 1 },
+      { name: "prescription", maxCount: 1 },
+    ])(req, res, (err) => {
+      if (err) return next(err);
+
+      const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+      const file = files?.prescriptionFile?.[0] || files?.prescription?.[0];
+      if (file) req.file = file;
+
+      next();
+    });
+  },
   avatar: multer({
     storage,
     fileFilter: imageFilter,

@@ -25,6 +25,18 @@ const PrescriptionOrderSchema = new Schema(
       type: String,
       default: "",
     },
+    suggestedMedicines: {
+      type: [
+        {
+          id: { type: String, default: "" },
+          name: { type: String, required: true, trim: true },
+          dosage: { type: String, default: "", trim: true },
+          quantity: { type: Number, default: 1, min: 1 },
+          price: { type: Number, default: 0, min: 0 },
+        },
+      ],
+      default: [],
+    },
     ocrProcessedAt: {
       type: Date,
       default: null,
@@ -41,6 +53,11 @@ const PrescriptionOrderSchema = new Schema(
     verificationNotes: {
       type: String,
       default: "",
+    },
+    pharmacistNotes: {
+      type: String,
+      default: "",
+      trim: true,
     },
     user: {
       userId: { type: Types.ObjectId, ref: "User", required: true, index: true },
@@ -108,7 +125,7 @@ const PrescriptionOrderSchema = new Schema(
 PrescriptionOrderSchema.index({ "user.userId": 1, createdAt: -1 });
 
 export const PrescriptionOrder =
-  (mongoose.models.PrescriptionOrder as mongoose.Model<any>) ||
-  model("PrescriptionOrder", PrescriptionOrderSchema);
+  ((mongoose.models.PrescriptionOrder as mongoose.Model<any>) ||
+    model<any>("PrescriptionOrder", PrescriptionOrderSchema)) as mongoose.Model<any>;
 
 export default PrescriptionOrder;

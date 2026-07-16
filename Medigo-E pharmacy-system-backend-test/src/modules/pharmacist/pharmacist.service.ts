@@ -3,6 +3,57 @@ import PrescriptionOrder from "../prescriptionOrder/prescriptionOrder.schema";
 import Order from "../order/Order.schema";
 import { ApiError, paginate } from "../../shared/utils";
 
+export const formatPrescriptionOrderForPharmacist = (prescription: any) => {
+  if (!prescription) return prescription;
+
+  const user = prescription.user?.userId || prescription.user || {};
+  const address = prescription.address || {};
+
+  return {
+    _id: prescription._id,
+    prescriptionImageUrl: prescription.prescriptionImageUrl || prescription.prescriptionFile || "",
+    prescriptionFile: prescription.prescriptionFile || "",
+    extractedText: prescription.extractedText || "",
+    suggestedMedicines: prescription.suggestedMedicines || [],
+    medicines: prescription.medicines || [],
+    customerName: user.name || "",
+    customerPhone: user.phone || "",
+    customerEmail: user.email || "",
+    deliveryAddress: address.line1 || "",
+    city: address.city || "",
+    country: address.country || "",
+    address,
+    status: prescription.status,
+    notes: prescription.notes || "",
+    pharmacistNotes: prescription.pharmacistNotes || prescription.verificationNotes || "",
+    verificationNotes: prescription.verificationNotes || "",
+    createdAt: prescription.createdAt,
+    updatedAt: prescription.updatedAt,
+  };
+};
+
+export const formatOrderForPharmacist = (order: any) => {
+  if (!order) return order;
+
+  const user = order.user || {};
+  const deliveryAddress = order.deliveryAddress || {};
+
+  return {
+    _id: order._id,
+    customerName: user.name || "",
+    customerPhone: user.phone || "",
+    deliveryAddress: deliveryAddress.line1 || "",
+    city: deliveryAddress.city || "",
+    country: deliveryAddress.country || "",
+    address: deliveryAddress,
+    status: order.status,
+    totalAmount: order.totalAmount ?? order.grandTotal ?? 0,
+    medicines: order.medicines || [],
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+  };
+};
+
 export class PharmacistService {
   /**
    * Get pharmacist dashboard statistics
@@ -89,7 +140,7 @@ export class PharmacistService {
 
       const totalPages = Math.ceil(total / limit);
       return {
-        items,
+        items: items.map(formatPrescriptionOrderForPharmacist),
         pagination: { total, page, limit, totalPages },
       };
     } catch (error) {
@@ -118,7 +169,7 @@ export class PharmacistService {
         throw new ApiError(404, "Prescription not found");
       }
 
-      return prescription;
+      return formatPrescriptionOrderForPharmacist(prescription);
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw new ApiError(
@@ -154,6 +205,7 @@ export class PharmacistService {
           verifiedBy: new mongoose.Types.ObjectId(pharmacistId),
           verifiedAt: new Date(),
           verificationNotes: verificationNotes || "",
+          pharmacistNotes: verificationNotes || "",
         },
         { new: true }
       )
@@ -168,7 +220,7 @@ export class PharmacistService {
       // TODO: Create order from prescription
       // await OrderService.createFromPrescription(updatedPrescription);
 
-      return updatedPrescription;
+      return formatPrescriptionOrderForPharmacist(updatedPrescription);
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw new ApiError(
@@ -202,6 +254,7 @@ export class PharmacistService {
           verifiedBy: new mongoose.Types.ObjectId(pharmacistId),
           verifiedAt: new Date(),
           verificationNotes: `REJECTED: ${reason}`,
+          pharmacistNotes: reason,
         },
         { new: true }
       )
@@ -215,7 +268,7 @@ export class PharmacistService {
       // TODO: Send notification to user about rejection
       // notificationService.sendRejectionEmail(updatedPrescription.user.email, reason);
 
-      return updatedPrescription;
+      return formatPrescriptionOrderForPharmacist(updatedPrescription);
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw new ApiError(
@@ -261,7 +314,7 @@ export class PharmacistService {
 
       const totalPages = Math.ceil(total / limit);
       return {
-        items,
+        items: items.map(formatOrderForPharmacist),
         pagination: { total, page, limit, totalPages },
       };
     } catch (error) {
@@ -290,7 +343,7 @@ export class PharmacistService {
         throw new ApiError(404, "Order not found");
       }
 
-      return order;
+      return formatOrderForPharmacist(order);
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw new ApiError(
@@ -385,8 +438,9 @@ export class PharmacistService {
 
       // TODO: Generate PDF or HTML invoice
       // For now, return invoice data structure
+      const orderIdValue = (order as any)?._id ?? orderId;
       const invoiceData = {
-        invoiceId: `INV-${(order as any)._id}`,
+        invoiceId: `INV-${orderIdValue}`,
         invoiceDate: new Date().toISOString(),
         order,
         totalAmount: (order as any).totalAmount || 0,

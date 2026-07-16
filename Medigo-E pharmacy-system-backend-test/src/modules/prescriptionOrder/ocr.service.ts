@@ -1,5 +1,14 @@
 import Tesseract from 'tesseract.js';
 import { ApiError } from '../../shared/utils';
+import Product from '../product/Product.schema';
+
+export type SuggestedMedicine = {
+  id: string;
+  name: string;
+  dosage: string;
+  quantity: number;
+  price: number;
+};
 
 export class OCRService {
   /**
@@ -68,6 +77,31 @@ export class OCRService {
     }
 
     return medicines;
+  }
+
+  static async matchMedicinesFromText(text: string): Promise<SuggestedMedicine[]> {
+    if (!text?.trim()) return [];
+
+    const normalizedText = text.toLowerCase();
+    const medicines = await Product.find({ status: "active" })
+      .select("_id name genericName brandName strength price salePrice")
+      .lean();
+
+    return medicines
+      .filter((medicine: any) => {
+        const names = [medicine.name, medicine.genericName, medicine.brandName]
+          .filter(Boolean)
+          .map((name) => String(name).toLowerCase());
+
+        return names.some((name) => normalizedText.includes(name));
+      })
+      .map((medicine: any) => ({
+        id: String(medicine._id),
+        name: medicine.name,
+        dosage: medicine.strength || "",
+        quantity: 1,
+        price: Number(medicine.salePrice ?? medicine.price ?? 0),
+      }));
   }
 
   /**
