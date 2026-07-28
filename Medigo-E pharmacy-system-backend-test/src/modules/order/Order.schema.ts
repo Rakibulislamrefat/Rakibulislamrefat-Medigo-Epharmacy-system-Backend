@@ -8,7 +8,11 @@ export type OrderStatus =
   | "shipped"
   | "delivered"
   | "cancelled"
-  | "refunded";
+  | "refunded"
+  | "pending_pickup"
+  | "picked"
+  | "packed"
+  | "ready_for_delivery";
 
 export type PaymentStatus = "unpaid" | "paid" | "failed" | "refunded";
 
@@ -28,9 +32,25 @@ const OrderSchema = new Schema(
     orderNumber: { type: String, required: true, unique: true, index: true },
     user: { type: Types.ObjectId, ref: "User", required: true, index: true },
     items: { type: [OrderItemSchema], default: [] },
+    prescriptionOrderId: { type: Types.ObjectId, ref: "PrescriptionOrder", default: null, index: true },
+    medicines: {
+      type: [
+        {
+          medicineId: { type: Types.ObjectId, ref: "Product", default: null },
+          name: { type: String, required: true, trim: true },
+          dosage: { type: String, default: "", trim: true },
+          quantity: { type: Number, default: 1, min: 1 },
+          price: { type: Number, default: 0, min: 0 },
+          salePrice: { type: Number, default: null, min: 0 },
+          requiresPrescription: { type: Boolean, default: false },
+          status: { type: String, default: "active" },
+        },
+      ],
+      default: [],
+    },
     status: {
       type: String,
-      enum: ["pending", "confirmed", "processing", "ready", "shipped", "delivered", "cancelled", "refunded"],
+      enum: ["pending", "confirmed", "processing", "ready", "shipped", "delivered", "cancelled", "refunded", "pending_pickup", "picked", "packed", "ready_for_delivery"],
       default: "pending",
       index: true,
     },

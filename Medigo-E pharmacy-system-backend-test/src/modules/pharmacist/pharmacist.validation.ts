@@ -13,12 +13,23 @@ export const medicineSchema = z.object({
   ),
 });
 
-export const verifyPrescriptionSchema = z.object({
-  medicines: z
-    .array(medicineSchema)
-    .min(1, "At least one medicine is required"),
-  verificationNotes: z.string().optional(),
-});
+export const verifyPrescriptionSchema = z
+  .object({
+    medicines: z.array(medicineSchema).optional(),
+    verifiedMedicines: z.array(medicineSchema).optional(),
+    verificationNotes: z.string().optional(),
+    pharmacistNotes: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      const medicines = data.medicines ?? data.verifiedMedicines;
+      return Array.isArray(medicines) && medicines.length > 0;
+    },
+    {
+      message: "At least one medicine is required",
+      path: ["medicines"],
+    }
+  );
 
 export const rejectPrescriptionSchema = z.object({
   reason: z.string().min(5, "Rejection reason must be at least 5 characters"),

@@ -40,8 +40,9 @@ export const formatOrderForPharmacist = (order: any) => {
 
   return {
     _id: order._id,
-    customerName: user.name || "",
-    customerPhone: user.phone || "",
+    prescriptionOrderId: order.prescriptionOrderId || null,
+    customerName: order.contactName || user.name || "",
+    customerPhone: order.contactPhone || user.phone || "",
     deliveryAddress: deliveryAddress.line1 || "",
     city: deliveryAddress.city || "",
     country: deliveryAddress.country || "",
@@ -51,6 +52,54 @@ export const formatOrderForPharmacist = (order: any) => {
     medicines: order.medicines || [],
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
+  };
+};
+
+export const buildFulfillmentOrderData = (prescription: any, medicines: any[] = [], notes = "") => {
+  const user = prescription?.user?.userId || prescription?.user || {};
+  const address = prescription?.address || {};
+  const normalizedMedicines = (medicines || []).map((medicine: any) => ({
+    medicineId: medicine.medicineId ? new mongoose.Types.ObjectId(medicine.medicineId) : null,
+    name: String(medicine.name || ""),
+    dosage: String(medicine.dosage || ""),
+    quantity: Number(medicine.quantity || 1),
+    price: Number(medicine.price || 0),
+    salePrice: Number(medicine.salePrice || medicine.price || 0),
+    requiresPrescription: Boolean(medicine.requiresPrescription || false),
+    status: "active",
+  }));
+
+  const totalAmount = normalizedMedicines.reduce(
+    (sum, medicine) => sum + Number(medicine.price || 0) * Number(medicine.quantity || 1),
+    0
+  );
+
+  return {
+    orderNumber: `FUL-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
+    user: user._id || user.id || prescription?.user?.userId || undefined,
+    prescriptionOrderId: prescription?._id ? new mongoose.Types.ObjectId(prescription._id) : null,
+    medicines: normalizedMedicines,
+    status: "pending_pickup",
+    customerName: prescription?.user?.name || user.name || "",
+    customerPhone: prescription?.user?.phone || user.phone || "",
+    contactName: prescription?.user?.name || user.name || "",
+    contactPhone: prescription?.user?.phone || user.phone || "",
+    deliveryAddress: {
+      line1: address.line1 || "",
+      line2: address.line2 || "",
+      city: address.city || "",
+      state: address.state || "",
+      postcode: address.postcode || "",
+      country: address.country || "",
+      country_code: address.country_code || "",
+      coordinates: address.coordinates || {},
+    },
+    totalAmount,
+    subtotal: totalAmount,
+    grandTotal: totalAmount,
+    notes: notes || "",
+    prescriptionRequired: true,
+    prescription: prescription?._id || null,
   };
 };
 
@@ -201,7 +250,18 @@ export class PharmacistService {
         prescriptionId,
         {
           status: "verified",
-          medicines,
+          medicines: (medicines || []).map((medicine: any) => ({
+            medicineId: medicine.medicineId ? new mongoose.Types.ObjectId(medicine.medicineId) : undefined,
+            name: String(medicine.name || ""),
+            genericName: String(medicine.genericName || ""),
+            brandName: String(medicine.brandName || ""),
+            quantity: Number(medicine.quantity || 1),
+            price: Number(medicine.price || 0),
+            salePrice: Number(medicine.salePrice || medicine.price || 0),
+            images: medicine.images || [],
+            requiresPrescription: Boolean(medicine.requiresPrescription || false),
+            status: "active",
+          })),
           verifiedBy: new mongoose.Types.ObjectId(pharmacistId),
           verifiedAt: new Date(),
           verificationNotes: verificationNotes || "",
@@ -216,11 +276,19 @@ export class PharmacistService {
         throw new ApiError(404, "Prescription not found");
       }
 
-      // TODO: Send notification to user that prescription is verified
-      // TODO: Create order from prescription
-      // await OrderService.createFromPrescription(updatedPrescription);
+      const prescriptionIdValue = (updatedPrescription as any)?._id ?? prescriptionId;
+      const existingFulfillmentOrder = await Order.findOne({ prescriptionOrderId: prescriptionIdValue }).lean();
+      const fulfillmentOrder = existingFulfillmentOrder
+        ? existingFulfillmentOrder
+        : await Order.create(buildFulfillmentOrderData(updatedPrescription, medicines, verificationNotes || ""));
 
-      return formatPrescriptionOrderForPharmacist(updatedPrescription);
+      const responsePayload = {
+        ...formatPrescriptionOrderForPharmacist(updatedPrescription),
+        fulfillmentOrderId: fulfillmentOrder?._id || null,
+        fulfillmentOrder: formatOrderForPharmacist(fulfillmentOrder),
+      };
+
+      return responsePayload;
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw new ApiError(
@@ -408,7 +476,7 @@ export class PharmacistService {
       // TODO: Send notification to user about status update
       // notificationService.sendOrderStatusUpdate(order.user.email, newStatus);
 
-      return updatedOrder;
+      return formatOrderForPharmacist(updatedOrder);
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw new ApiError(
