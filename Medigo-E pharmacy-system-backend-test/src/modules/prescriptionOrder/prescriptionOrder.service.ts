@@ -12,6 +12,7 @@ const PRESCRIPTION_ORDER_FIELDS = [
   "address",
   "medicines",
   "suggestedMedicines",
+  "suggestedMatches",
   "notes",
   "status",
   "extractedText",
@@ -20,6 +21,7 @@ const PRESCRIPTION_ORDER_FIELDS = [
   "verifiedAt",
   "verificationNotes",
   "pharmacistNotes",
+  "paymentInfo",
 ];
 
 const isValidId = (id: string) => mongoose.Types.ObjectId.isValid(id);

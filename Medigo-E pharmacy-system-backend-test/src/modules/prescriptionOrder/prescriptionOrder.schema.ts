@@ -37,6 +37,10 @@ const PrescriptionOrderSchema = new Schema(
       ],
       default: [],
     },
+    suggestedMatches: {
+      type: [Schema.Types.Mixed],
+      default: [],
+    },
     ocrProcessedAt: {
       type: Date,
       default: null,

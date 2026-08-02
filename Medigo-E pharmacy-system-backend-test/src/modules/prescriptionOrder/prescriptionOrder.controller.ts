@@ -3,6 +3,8 @@ import { ApiError, ApiResponse, asyncHandler } from "../../shared/utils";
 import { PrescriptionOrderService } from "./prescriptionOrder.service";
 import { SSLCommerzService } from "../sslcommerz/sslcommerz.service";
 import { OCRService } from "./ocr.service";
+import { autoMatchPrescription, calculateOrderTotals } from "./prescriptionMatcher.service";
+import { matchMedicineFuse } from "./fuseMatcher";
 
 const getUserId = (req: Request) => {
   const userId = req.user?.id;
@@ -14,12 +16,14 @@ const processPrescriptionOCR = async (prescriptionId: string, filePath: string) 
   try {
     const extractedText = await OCRService.extractTextFromPrescription(filePath);
     const suggestedMedicines = await OCRService.matchMedicinesFromText(extractedText);
+    const autoMatched = await autoMatchPrescription({ extractedText, ocrText: extractedText });
 
     return PrescriptionOrderService.update(prescriptionId, {
       extractedText,
       suggestedMedicines,
+      suggestedMatches: autoMatched.items,
       ocrProcessedAt: new Date(),
-      status: "pending_verification",
+      status: autoMatched.status,
       pharmacistNotes: "",
     });
   } catch (error) {
@@ -28,6 +32,7 @@ const processPrescriptionOCR = async (prescriptionId: string, filePath: string) 
     return PrescriptionOrderService.update(prescriptionId, {
       extractedText: "",
       suggestedMedicines: [],
+      suggestedMatches: [],
       ocrProcessedAt: new Date(),
       status: "pending_verification",
       pharmacistNotes: "OCR failed or no readable text found. Manual review required.",
@@ -163,17 +168,18 @@ export const uploadAndProcessPrescription = asyncHandler(async (req: Request, re
  */
 export const verifyPrescription = asyncHandler(async (req: Request, res: Response) => {
   const pharmacistId = getUserId(req);
-  const { medicines, status = "verified", verificationNotes = "" } = req.body;
+  const { medicines, status = "verified", verificationNotes = "", deliveryFee = 0, discount = 0 } = req.body;
 
   if (!medicines || !Array.isArray(medicines)) {
     throw new ApiError(400, "medicines array is required");
   }
 
-  // Validate status is one of allowed values
   const allowedStatuses = ["verified", "rejected"];
   if (!allowedStatuses.includes(status)) {
     throw new ApiError(400, `Status must be one of: ${allowedStatuses.join(", ")}`);
   }
+
+  const totals = await calculateOrderTotals(medicines, Number(deliveryFee || 0), Number(discount || 0));
 
   const updatedPrescription = await PrescriptionOrderService.update(req.params.id, {
     medicines,
@@ -181,10 +187,17 @@ export const verifyPrescription = asyncHandler(async (req: Request, res: Respons
     verifiedBy: pharmacistId,
     verifiedAt: new Date(),
     verificationNotes,
+    paymentInfo: {
+      ...(req.body.paymentInfo || {}),
+      calculatedTotals: totals,
+    },
   });
 
   res.status(200).json(
-    new ApiResponse(200, `Prescription ${status} by pharmacist`, updatedPrescription)
+    new ApiResponse(200, `Prescription ${status} by pharmacist`, {
+      ...updatedPrescription,
+      pricing: totals,
+    })
   );
 });
 
@@ -207,12 +220,62 @@ export const getPrescriptionOCRDetails = asyncHandler(async (req: Request, res: 
     throw new ApiError(403, "Not authorized to view this prescription");
   }
 
+  // Normalize suggestedMatches and suggestedMedicines for frontend compatibility
+  const rawMatches = Array.isArray(prescription.suggestedMatches) ? prescription.suggestedMatches : [];
+  const rawMedicines = Array.isArray(prescription.suggestedMedicines) ? prescription.suggestedMedicines : [];
+
+  const suggestedMatches = rawMatches.map((m: any) => {
+    const suggestions = Array.isArray(m.suggestions)
+      ? m.suggestions.map((s: any) => ({
+          _id: s._id ?? s.id ?? null,
+          name: s.name ?? s.productName ?? null,
+          price: Number(s.price ?? s.salePrice ?? s.price ?? 0) || 0,
+          stock: Number(s.stock ?? s.stockQty ?? s.stockQty ?? 0) || 0,
+          score: typeof s.score === 'number' ? s.score : (typeof s.matchScore === 'number' ? s.matchScore : undefined),
+        }))
+      : [];
+
+    return {
+      ocrLine: m.ocrLine ?? m.rawText ?? null,
+      parsedName: m.parsedName ?? null,
+      quantity: typeof m.quantity === 'number' ? m.quantity : Number(m.quantity || 1),
+      suggestions,
+      selectedMedicineId: m.selectedMedicineId ?? m.selectedId ?? null,
+      manualReview: Boolean(m.manualReview),
+      matchConfidence: typeof m.matchConfidence === 'number' ? m.matchConfidence : (m.score ?? undefined),
+    };
+  });
+
+  // Build suggestedMedicines for frontend convenience (name, medicineId, price, quantity)
+  const suggestedMedicines = rawMatches.map((m: any, idx: number) => {
+    const match = suggestedMatches[idx] ?? {};
+    const chosen = Array.isArray(match.suggestions) && match.suggestions.length > 0
+      ? match.suggestions.find((s: any) => String(s._id) === String(match.selectedMedicineId)) ?? match.suggestions[0]
+      : null;
+
+    const base = rawMedicines[idx] ?? {};
+
+    const price = chosen?.price ?? (base.price ?? base.salePrice ?? null);
+    const salePrice = price;
+
+    return {
+      id: base.id ?? base._id ?? `line_${idx}`,
+      medicineId: chosen?._id ?? base.medicineId ?? base._id ?? null,
+      name: chosen?.name ?? base.name ?? match.parsedName ?? base.medicineName ?? match.ocrLine ?? `line_${idx}`,
+      dosage: base.dosage ?? base.strength ?? null,
+      quantity: match.quantity ?? base.quantity ?? 1,
+      price: price ?? null,
+      salePrice: salePrice ?? null,
+    };
+  });
+
   res.status(200).json(
     new ApiResponse(200, "Prescription OCR details fetched", {
       prescriptionId: prescription._id,
       status: prescription.status,
       extractedText: prescription.extractedText,
-      suggestedMedicines: prescription.suggestedMedicines || [],
+      suggestedMedicines,
+      suggestedMatches,
       ocrProcessedAt: prescription.ocrProcessedAt,
       verificationStatus: prescription.verifiedAt ? "verified" : "pending",
       verifiedBy: prescription.verifiedBy,
@@ -220,4 +283,30 @@ export const getPrescriptionOCRDetails = asyncHandler(async (req: Request, res: 
       pharmacistNotes: prescription.pharmacistNotes,
     })
   );
+});
+
+// Demo endpoint to run the matcher live for a prescription id
+export const getPrescriptionMatchDemo = asyncHandler(async (req: Request, res: Response) => {
+  const prescription = await PrescriptionOrderService.getById(req.params.id);
+  if (!prescription) throw new ApiError(404, "Prescription not found");
+
+  const ocrText = prescription.extractedText || '';
+
+  // Run auto-match pipeline
+  const auto = await autoMatchPrescription({ extractedText: ocrText, ocrText });
+
+  // Also run the lower-level fuse matcher for the full text as a convenience
+  const simpleSuggestions = [] as any[];
+  const lines = (ocrText || '').split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    const matches = await matchMedicineFuse(line, 5);
+    simpleSuggestions.push({ ocrLine: line, matches });
+  }
+
+  res.status(200).json(new ApiResponse(200, 'Matcher demo output', {
+    prescriptionId: prescription._id,
+    extractedText: ocrText,
+    suggestedMatches: auto.items,
+    simpleSuggestions,
+  }));
 });

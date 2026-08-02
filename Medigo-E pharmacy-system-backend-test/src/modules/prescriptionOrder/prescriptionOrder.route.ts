@@ -15,6 +15,7 @@ import {
   uploadAndProcessPrescription,
   verifyPrescription,
   getPrescriptionOCRDetails,
+  getPrescriptionMatchDemo,
 } from "./prescriptionOrder.controller";
 import {
   createPrescriptionOrderSchema,
@@ -37,10 +38,17 @@ router.post(
 
 // Get OCR details for a specific prescription
 router.get("/ocr/:id", getPrescriptionOCRDetails);
+// Demo matcher endpoint (returns autoMatch + per-line Fuse suggestions)
+router.get("/ocr/:id/match-demo", authorize("admin", "pharmacist"), getPrescriptionMatchDemo);
 
 // Pharmacist verification endpoint - verify and edit extracted medicines
 router.put(
   "/verify/:id",
+  authorize("admin", "pharmacist"),
+  verifyPrescription,
+);
+router.post(
+  "/:id/verify",
   authorize("admin", "pharmacist"),
   verifyPrescription,
 );

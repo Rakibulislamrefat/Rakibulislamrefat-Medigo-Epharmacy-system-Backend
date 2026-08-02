@@ -1,11 +1,24 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
+interface MedicineSuggestion {
+  _id: string;
+  name: string;
+  price: number;
+  stock: number;
+  score: number;
+}
+
 interface Medicine {
   medicineId?: string;
   name: string;
   dosage: string;
   quantity: string | number;
+  price?: number;
+  salePrice?: number;
+  suggestions?: MedicineSuggestion[];
+  manualReview?: boolean;
+  ocrLine?: string;
 }
 
 interface Prescription {
@@ -34,7 +47,12 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [status, setStatus] = useState<'verified' | 'rejected'>('verified');
+  const [pricing, setPricing] = useState<any>(null);
 
+  const sanitizeName = (value?: string) => {
+    if (!value) return '';
+    return String(value).replace(/^[^a-zA-Z0-9]+/, '').trim();
+  };
   useEffect(() => {
     if (initialId) {
       loadPrescription(initialId);
@@ -44,10 +62,34 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
   const loadPrescription = async (id: string) => {
     setLoading(true);
     setError(null);
+    setPricing(null);
     try {
       const { data } = await axios.get(`/api/prescription-orders/ocr/${id}`);
-      setPrescription(data.data);
-      setMedicines(data.data.suggestedMedicines || []);
+      const rawPrescription = data.data;
+      const baseMedicines = rawPrescription.suggestedMedicines || [];
+      const matches = rawPrescription.suggestedMatches || [];
+
+      const mappedMedicines = baseMedicines.map((item: any, index: number) => {
+        const match = matches[index] || null;
+        const rawName = sanitizeName(item.name || match?.parsedName || '');
+        const suggested = (match?.suggestions && match.suggestions.length > 0) ? match.suggestions : (item.suggestions || []);
+        const topSuggestion = suggested?.[0];
+
+        return {
+          ...item,
+          medicineId: match?.selectedMedicineId || topSuggestion?._id || item.medicineId || item.id || '',
+          name: rawName || topSuggestion?.name || match?.parsedName || item.name || '',
+          dosage: item.dosage || '',
+          quantity: Number(item.quantity || 1),
+          price: Number(item.price ?? topSuggestion?.price ?? item.salePrice ?? 0),
+          suggestions: suggested || [],
+          manualReview: Boolean(match?.manualReview),
+          ocrLine: match?.ocrLine || '',
+        };
+      });
+
+      setPrescription(rawPrescription);
+      setMedicines(mappedMedicines);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load prescription');
     } finally {
@@ -73,9 +115,26 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
 
   const handleUpdateMedicine = (index: number, field: keyof Medicine, value: string) => {
     const updated = [...medicines];
-    updated[index] = { ...updated[index], [field]: value };
+    const newVal: any = field === 'quantity' ? Math.max(Number(value || 0), 0) : value;
+    updated[index] = { ...updated[index], [field]: newVal };
     setMedicines(updated);
   };
+
+  // Recalculate pricing locally whenever medicines change so UI shows updated totals immediately
+  useEffect(() => {
+    if (!medicines || medicines.length === 0) {
+      setPricing(null);
+      return;
+    }
+
+    const subtotal = medicines.reduce((sum, m) => {
+      const unit = Number(m.price ?? m.salePrice ?? 0);
+      const qty = Math.max(Number(m.quantity || 1), 0);
+      return sum + unit * qty;
+    }, 0);
+
+    setPricing({ subtotal, deliveryFee: 0, discount: 0, finalTotal: subtotal });
+  }, [medicines]);
 
   const handleVerify = async () => {
     if (medicines.length === 0) {
@@ -94,6 +153,7 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
         verificationNotes,
       });
 
+      setPricing(data.data?.pricing || null);
       setSuccess(`Prescription ${status} successfully!`);
       setPrescription(null);
       setMedicines([]);
@@ -275,6 +335,9 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
                 <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid #ddd' }}>Medicine Name</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid #ddd' }}>Dosage</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid #ddd' }}>Quantity</th>
+                <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid #ddd' }}>Unit Price</th>
+                <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid #ddd' }}>Line Total</th>
+                <th style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid #ddd' }}>Auto-match</th>
                 <th style={{ padding: '10px', textAlign: 'center' }}>Action</th>
               </tr>
             </thead>
@@ -312,7 +375,7 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
                   <td style={{ padding: '10px', borderRight: '1px solid #ddd' }}>
                     <input
                       type="number"
-                      value={medicine.quantity}
+                      value={medicine.quantity as number}
                       onChange={(e) => handleUpdateMedicine(idx, 'quantity', e.target.value)}
                       style={{
                         width: '100%',
@@ -322,6 +385,44 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
                         boxSizing: 'border-box'
                       }}
                     />
+                  </td>
+                  <td style={{ padding: '10px', borderRight: '1px solid #ddd' }}>
+                    BDT {Number(medicine.price ?? medicine.salePrice ?? 0).toFixed(2)}
+                  </td>
+                  <td style={{ padding: '10px', borderRight: '1px solid #ddd' }}>
+                    BDT {(Number(medicine.price ?? medicine.salePrice ?? 0) * Math.max(Number(medicine.quantity || 1), 0)).toFixed(2)}
+                  </td>
+                  <td style={{ padding: '10px', borderRight: '1px solid #ddd' }}>
+                    {medicine.suggestions && medicine.suggestions.length > 0 ? (
+                      <div>
+                        <div style={{ fontSize: '12px', marginBottom: '4px' }}>
+                          {medicine.manualReview ? '⚠ Manual review recommended' : '✅ Auto-matched'}
+                        </div>
+                        <select
+                          value={medicine.medicineId || ''}
+                          onChange={(e) => {
+                            const selected = medicine.suggestions?.find((suggestion) => suggestion._id === e.target.value);
+                            const updated = [...medicines];
+                            updated[idx] = {
+                              ...updated[idx],
+                              medicineId: e.target.value,
+                              name: sanitizeName(selected?.name || updated[idx].name),
+                              price: Number(selected?.price ?? updated[idx].price ?? 0),
+                            };
+                            setMedicines(updated);
+                          }}
+                          style={{ width: '100%', padding: '5px', borderRadius: '4px', border: '1px solid #ddd' }}
+                        >
+                          {medicine.suggestions.map((suggestion) => (
+                            <option key={suggestion._id} value={suggestion._id}>
+                              {suggestion.name} · BDT {suggestion.price} · stock {suggestion.stock}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <span style={{ color: '#888' }}>No auto-match found</span>
+                    )}
                   </td>
                   <td style={{ padding: '10px', textAlign: 'center' }}>
                     <button
@@ -359,6 +460,22 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
           + Add Medicine
         </button>
       </div>
+
+      {pricing && (
+        <div style={{
+          backgroundColor: '#f0f8ff',
+          padding: '15px',
+          marginBottom: '20px',
+          borderRadius: '8px',
+          border: '1px solid #b8d8ff'
+        }}>
+          <h3 style={{ marginTop: 0 }}>Calculated Pricing</h3>
+          <p style={{ margin: '4px 0' }}><strong>Subtotal:</strong> BDT {pricing.subtotal}</p>
+          <p style={{ margin: '4px 0' }}><strong>Delivery Fee:</strong> BDT {pricing.deliveryFee}</p>
+          <p style={{ margin: '4px 0' }}><strong>Discount:</strong> BDT {pricing.discount}</p>
+          <p style={{ margin: '4px 0' }}><strong>Final Total:</strong> BDT {pricing.finalTotal}</p>
+        </div>
+      )}
 
       {/* Verification Notes */}
       <div style={{

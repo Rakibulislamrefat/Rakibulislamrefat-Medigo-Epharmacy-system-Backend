@@ -1,13 +1,18 @@
 import Tesseract from 'tesseract.js';
+import Fuse from 'fuse.js';
 import { ApiError } from '../../shared/utils';
 import Product from '../product/Product.schema';
 
 export type SuggestedMedicine = {
-  id: string;
+  id: string | null;
+  rawText: string;
   name: string;
   dosage: string;
   quantity: number;
-  price: number;
+  price: number | null;
+  stockQty: number;
+  available: boolean;
+  matchConfidence: number;
 };
 
 export class OCRService {
@@ -21,10 +26,8 @@ export class OCRService {
         throw new ApiError(400, 'Image path is required');
       }
 
-      // Tesseract.js can work with URLs directly
       const { data } = await Tesseract.recognize(imagePath, 'eng', {
         logger: (m) => {
-          // Optional: Log progress
           if (m.status === 'recognizing text') {
             console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
           }
@@ -45,35 +48,69 @@ export class OCRService {
     }
   }
 
+  private static normalizeName(value: string): string {
+    return String(value || '')
+      .toLowerCase()
+      .replace(/\b(tab|cap|syp|inj|tablet|capsule|syrup|injection)\.?\b/gi, '')
+      .replace(/\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu)\b/gi, '')
+      .replace(/\b\d+\s*[+\-]\s*\d+\s*[+\-]\s*\d+\b/g, '')
+      .replace(/\b(?:od|bd|tid|qid|hs|ac|pc|stat)\b/gi, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  }
+
   /**
-   * Parse extracted text to identify medicines
-   * Looks for common patterns like "Aspirin 500mg x 10 tablets"
+   * Parse OCR text into individual prescription line items.
+   * It intentionally skips header / footer / advice / signature sections.
    */
   static parseMedicinesFromText(text: string): Array<{ name: string; dosage: string; quantity: string }> {
     const medicines: Array<{ name: string; dosage: string; quantity: string }> = [];
 
     if (!text) return medicines;
 
-    // Split by common delimiters
-    const lines = text.split(/[\n\r]+/);
+    const lines = String(text).split(/[\n\r]+/).map((line) => line.trim()).filter(Boolean);
 
     for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed.length < 3) continue;
+      const lower = line.toLowerCase();
 
-      // Pattern: "Medicine Name Dosage x Quantity"
-      // Example: "Aspirin 500mg x 10 tablets"
-      const match = trimmed.match(
-        /^([a-zA-Z\s]+?)\s+(\d+\s*(?:mg|g|mcg|ml)?)\s*(?:x|X)?\s*(\d+)?/
-      );
-
-      if (match) {
-        medicines.push({
-          name: match[1].trim(),
-          dosage: match[2].trim(),
-          quantity: match[3] || '1',
-        });
+      if (
+        lower.includes('doctor') ||
+        lower.includes('signature') ||
+        lower.includes('patient') ||
+        lower.includes('date') ||
+        lower.includes('diagnosis') ||
+        lower.includes('advice') ||
+        lower.includes('follow up') ||
+        lower.includes('note') ||
+        lower.includes('pharmacy') ||
+        lower.startsWith('dr.') ||
+        lower.startsWith('dr')
+      ) {
+        continue;
       }
+
+      const hasMedicineEvidence = /\d+(?:\.\d+)?\s*(?:mg|g|mcg|ml|iu)|\d+\s*[+\-]\s*\d+\s*[+\-]\s*\d+|x\s*\d+|for\b|days?|weeks?|months?|after|before|meal|meals|tablet|capsule|syrup|injection|spray/i.test(line);
+      if (!hasMedicineEvidence) continue;
+
+      const cleanedLine = line.replace(/^\d+[.):-]\s*/i, '').trim();
+      const match = cleanedLine.match(/^([A-Za-z][A-Za-z0-9 .()-]+?)(?=\s+(?:\d+(?:\.\d+)?\s*(?:mg|g|mcg|ml|iu)|\d+\s*[+\-]\s*\d+\s*[+\-]\s*\d+|x\s*\d+|for\b|days?|weeks?|months?|after|before|meal|meals))/i);
+
+      const rawName = (match?.[1] || cleanedLine)
+        .replace(/\b(tab|cap|syp|inj|tablet|capsule|syrup|injection)\.?\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const dosageMatch = cleanedLine.match(/(\d+(?:\.\d+)?\s*(?:mg|g|mcg|ml|iu))/i);
+      const dosage = dosageMatch?.[1] || '';
+      const quantityMatch = cleanedLine.match(/(?:x|X)\s*(\d+)/i);
+      const quantity = quantityMatch?.[1] || '1';
+
+      if (!rawName || rawName.length < 2) continue;
+
+      medicines.push({
+        name: rawName.replace(/\s+/g, ' '),
+        dosage,
+        quantity,
+      });
     }
 
     return medicines;
@@ -82,26 +119,56 @@ export class OCRService {
   static async matchMedicinesFromText(text: string): Promise<SuggestedMedicine[]> {
     if (!text?.trim()) return [];
 
-    const normalizedText = text.toLowerCase();
-    const medicines = await Product.find({ status: "active" })
-      .select("_id name genericName brandName strength price salePrice")
+    const parsedMedicines = this.parseMedicinesFromText(text);
+
+    const products = await Product.find({ status: 'active' })
+      .select('_id name genericName brandName strength price salePrice stockQty')
       .lean();
 
-    return medicines
-      .filter((medicine: any) => {
-        const names = [medicine.name, medicine.genericName, medicine.brandName]
-          .filter(Boolean)
-          .map((name) => String(name).toLowerCase());
+    const indexableProducts = (products || []).map((product: any) => ({
+      _id: String(product._id),
+      name: product.name || '',
+      genericName: product.genericName || '',
+      brandName: product.brandName || '',
+      strength: product.strength || '',
+      price: Number(product.salePrice ?? product.price ?? 0),
+      stockQty: Number(product.stockQty ?? 0),
+    }));
 
-        return names.some((name) => normalizedText.includes(name));
-      })
-      .map((medicine: any) => ({
-        id: String(medicine._id),
-        name: medicine.name,
-        dosage: medicine.strength || "",
-        quantity: 1,
-        price: Number(medicine.salePrice ?? medicine.price ?? 0),
-      }));
+    const fuse = new Fuse(indexableProducts, {
+      keys: ['name', 'genericName', 'brandName'],
+      threshold: 0.8,
+      includeScore: true,
+      ignoreLocation: true,
+      minMatchCharLength: 3,
+    });
+
+    return parsedMedicines.map((item) => {
+      const normalizedName = this.normalizeName(item.name);
+      const cleanedLine = normalizedName || this.normalizeName(item.dosage || item.name);
+      const searchResults = cleanedLine ? fuse.search(cleanedLine) : [];
+      const topResult = searchResults[0] as any;
+      const rawScore = Number(topResult?.score ?? 1);
+      const matchConfidence = Number(Math.max(0, 1 - rawScore).toFixed(2));
+      const product = topResult?.item as any;
+
+      const isConfident = Boolean(product && matchConfidence >= 0.2);
+      const stockQty = Number(product?.stockQty ?? 0);
+      const available = Boolean(product && stockQty > 0 && isConfident);
+      const price = product ? Number(product.price ?? 0) : null;
+
+      return {
+        id: product ? String(product._id) : null,
+        rawText: item.name,
+        name: item.name,
+        dosage: item.dosage || '',
+        quantity: Number(item.quantity || 1),
+        price,
+        stockQty,
+        available,
+        matchConfidence: isConfident ? matchConfidence : 0,
+      };
+    });
   }
 
   /**
@@ -112,13 +179,11 @@ export class OCRService {
       return { isValid: false, confidence: 0 };
     }
 
-    // Check for common medical keywords
     const medicalKeywords = ['mg', 'ml', 'tablet', 'capsule', 'injection', 'spray', 'dose', 'times'];
     const foundKeywords = medicalKeywords.filter((keyword) => text.toLowerCase().includes(keyword)).length;
 
     const confidence = Math.min(100, (foundKeywords / medicalKeywords.length) * 100);
 
-    // Consider valid if we found at least 1 medical keyword
     return { isValid: foundKeywords >= 1, confidence };
   }
 }
