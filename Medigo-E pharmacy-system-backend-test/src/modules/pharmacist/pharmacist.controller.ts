@@ -143,9 +143,13 @@ export const generateInvoice = asyncHandler(async (req: Request, res: Response) 
   const result = await PharmacistService.generateInvoice(id);
   const invoiceUrl = (result as any)?.invoiceUrl || (result as any)?.invoiceData?.invoiceUrl || "";
 
-  res.status(200).json(new ApiResponse(200, "Invoice generated successfully", {
-    invoiceUrl,
-  }));
+  res.status(200).json({
+    status: 200,
+    message: "Invoice generated",
+    data: {
+      invoiceUrl,
+    },
+  });
 });
 
 /**

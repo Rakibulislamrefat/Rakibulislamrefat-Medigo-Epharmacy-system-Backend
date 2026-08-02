@@ -507,21 +507,22 @@ export class PharmacistService {
       // TODO: Generate PDF or HTML invoice
       // For now, return invoice data structure
       const orderIdValue = (order as any)?._id ?? orderId;
+      const invoiceId = `INV-${orderIdValue}`;
+      const invoiceUrl = `${process.env.API_URL || "http://localhost:5000"}/invoices/${invoiceId}.pdf`;
       const invoiceData = {
-        invoiceId: `INV-${orderIdValue}`,
+        invoiceId,
         invoiceDate: new Date().toISOString(),
         order,
         totalAmount: (order as any).totalAmount || 0,
       };
 
       // TODO: Save invoice to storage or S3
-      // TODO: Return download URL
 
       return {
         success: true,
         message: "Invoice generated",
         invoiceData,
-        // invoiceUrl: `${process.env.API_URL}/invoices/${invoiceId}.pdf`
+        invoiceUrl,
       };
     } catch (error) {
       if (error instanceof ApiError) throw error;
