@@ -8,9 +8,21 @@ import apiClient from '../config/axiosConfig';
 import { AuthContext } from '../context/AuthContext'; // Or your auth context
 
 interface MedicineExtracted {
+  id?: string | null;
+  medicineId?: string | null;
   name: string;
+  genericName?: string;
+  brandName?: string;
+  strength?: string;
   dosage: string;
-  quantity: string;
+  quantity: string | number;
+  price?: number | null;
+  salePrice?: number | null;
+  stockQty?: number;
+  available?: boolean;
+  matchConfidence?: number;
+  productInfo?: Record<string, any> | null;
+  rawText?: string;
 }
 
 interface OCRResult {
@@ -474,16 +486,37 @@ function PrescriptionUploadWithOCR() {
                 <thead>
                   <tr style={{ backgroundColor: '#f0f0f0', borderBottom: '2px solid #ddd' }}>
                     <th style={{ padding: '8px', textAlign: 'left', borderRight: '1px solid #ddd' }}>Medicine</th>
-                    <th style={{ padding: '8px', textAlign: 'left', borderRight: '1px solid #ddd' }}>Dosage</th>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>Qty</th>
+                    <th style={{ padding: '8px', textAlign: 'left', borderRight: '1px solid #ddd' }}>Details</th>
+                    <th style={{ padding: '8px', textAlign: 'left', borderRight: '1px solid #ddd' }}>Qty</th>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>Price</th>
                   </tr>
                 </thead>
                 <tbody>
                   {result.suggestedMedicines.map((med, idx) => (
                     <tr key={idx} style={{ borderBottom: '1px solid #ddd' }}>
-                      <td style={{ padding: '8px', borderRight: '1px solid #ddd' }}>{med.name}</td>
-                      <td style={{ padding: '8px', borderRight: '1px solid #ddd' }}>{med.dosage}</td>
-                      <td style={{ padding: '8px' }}>{med.quantity}</td>
+                      <td style={{ padding: '8px', borderRight: '1px solid #ddd' }}>
+                        <div style={{ fontWeight: '600' }}>
+                          {med.productInfo?.name || med.name}
+                        </div>
+                        {(med.productInfo?.brandName || med.productInfo?.genericName) && (
+                          <div style={{ color: '#555', fontSize: '13px' }}>
+                            {med.productInfo?.brandName ? `${med.productInfo.brandName}` : ''}
+                            {med.productInfo?.brandName && med.productInfo?.genericName ? ' · ' : ''}
+                            {med.productInfo?.genericName ? `${med.productInfo.genericName}` : ''}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '8px', borderRight: '1px solid #ddd' }}>
+                        {med.productInfo?.strength || med.dosage || '—'}
+                        {med.productInfo?.dosageForm ? ` · ${med.productInfo.dosageForm}` : ''}
+                        {med.available === false && (
+                          <div style={{ color: '#999', fontSize: '12px', marginTop: '4px' }}>No match found in inventory</div>
+                        )}
+                      </td>
+                      <td style={{ padding: '8px', borderRight: '1px solid #ddd' }}>{med.quantity}</td>
+                      <td style={{ padding: '8px' }}>
+                        BDT {Number(med.salePrice ?? med.price ?? 0).toFixed(2)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

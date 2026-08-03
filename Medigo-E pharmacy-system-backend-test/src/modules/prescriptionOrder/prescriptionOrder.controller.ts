@@ -229,9 +229,15 @@ export const getPrescriptionOCRDetails = asyncHandler(async (req: Request, res: 
       ? m.suggestions.map((s: any) => ({
           _id: s._id ?? s.id ?? null,
           name: s.name ?? s.productName ?? null,
+          genericName: s.genericName ?? s.productGenericName ?? null,
+          brandName: s.brandName ?? s.productBrandName ?? null,
+          strength: s.strength ?? s.productStrength ?? null,
+          dosageForm: s.dosageForm ?? null,
           price: Number(s.price ?? s.salePrice ?? s.price ?? 0) || 0,
+          salePrice: Number(s.salePrice ?? s.price ?? 0) || 0,
           stock: Number(s.stock ?? s.stockQty ?? s.stockQty ?? 0) || 0,
           score: typeof s.score === 'number' ? s.score : (typeof s.matchScore === 'number' ? s.matchScore : undefined),
+          productInfo: s.productInfo || null,
         }))
       : [];
 
@@ -254,18 +260,29 @@ export const getPrescriptionOCRDetails = asyncHandler(async (req: Request, res: 
       : null;
 
     const base = rawMedicines[idx] ?? {};
+    const product = chosen ?? base;
 
-    const price = chosen?.price ?? (base.price ?? base.salePrice ?? null);
-    const salePrice = price;
+    const price = Number(product.price ?? product.salePrice ?? base.price ?? base.salePrice ?? 0);
+    const salePrice = Number(product.salePrice ?? product.price ?? base.salePrice ?? base.price ?? 0);
+
+    const stockCount = Number(chosen?.stock ?? chosen?.stockQty ?? base.stockQty ?? 0);
 
     return {
       id: base.id ?? base._id ?? `line_${idx}`,
       medicineId: chosen?._id ?? base.medicineId ?? base._id ?? null,
       name: chosen?.name ?? base.name ?? match.parsedName ?? base.medicineName ?? match.ocrLine ?? `line_${idx}`,
-      dosage: base.dosage ?? base.strength ?? null,
+      genericName: chosen?.genericName ?? base.genericName ?? '',
+      brandName: chosen?.brandName ?? base.brandName ?? '',
+      strength: chosen?.strength ?? base.strength ?? '',
+      dosage: base.dosage ?? base.strength ?? '',
       quantity: match.quantity ?? base.quantity ?? 1,
-      price: price ?? null,
-      salePrice: salePrice ?? null,
+      price,
+      salePrice,
+      stockQty: stockCount,
+      available: stockCount > 0,
+      matchConfidence: match.matchConfidence ?? base.matchConfidence ?? 0,
+      rawText: base.rawText ?? match.parsedName ?? match.ocrLine ?? '',
+      productInfo: chosen ? { ...chosen } : null,
     };
   });
 

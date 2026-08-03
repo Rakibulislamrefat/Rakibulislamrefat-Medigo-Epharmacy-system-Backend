@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Session from "../modules/auth/Session.schema";
 import Doctor from "../modules/doctor/Doctor.schema";
+import Prescription from "../modules/prescription/Prescription.schema";
 
 let connectionPromise: Promise<typeof mongoose> | null = null;
 
@@ -43,6 +44,25 @@ const connectDB = async (): Promise<void> => {
       } else {
         console.warn("Failed to create doctors collection from schema:", err?.message || err);
       }
+    }
+
+    // Ensure the Prescription model is registered before populate() runs.
+    try {
+      await Prescription.createCollection();
+      console.log("Prescription collection created from Prescription schema");
+    } catch (err: any) {
+      if (err?.codeName === "NamespaceExists" || err?.code === 48) {
+        console.log("Prescription collection already exists");
+      } else {
+        console.warn("Failed to create Prescription collection from schema:", err?.message || err);
+      }
+    }
+
+    try {
+      await Prescription.syncIndexes();
+      console.log("Prescription indexes synchronized");
+    } catch (err: any) {
+      console.warn("Failed to sync Prescription indexes:", err?.message || err);
     }
 
     // Remove legacy `user_1` index on doctors collection if present

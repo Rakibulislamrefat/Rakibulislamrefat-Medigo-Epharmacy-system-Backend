@@ -8,7 +8,9 @@ type IndexableProduct = {
   brandName: string;
   strength: string;
   price: number;
+  salePrice: number | null;
   stockQty: number;
+  dosageForm?: string;
 };
 
 let cached: { fuse: Fuse<IndexableProduct>; products: IndexableProduct[] } | null = null;
@@ -19,7 +21,7 @@ export async function ensureCatalogLoaded() {
   if (cached) return cached;
 
   const products = await Product.find({ status: 'active' })
-    .select('_id name genericName brandName strength price salePrice stockQty')
+    .select('_id name genericName brandName strength price salePrice stockQty dosageForm')
     .lean();
 
   const indexable = (products || []).map((p: any) => ({
@@ -27,8 +29,10 @@ export async function ensureCatalogLoaded() {
     name: p.name || '',
     genericName: p.genericName || '',
     brandName: p.brandName || '',
-    strength: p.strength || p.strength || '',
+    strength: p.strength || '',
+    dosageForm: p.dosageForm || 'other',
     price: Number(p.salePrice ?? p.price ?? 0),
+    salePrice: p.salePrice ?? null,
     stockQty: Number(p.stockQty ?? 0),
   }));
 
@@ -55,7 +59,12 @@ export async function matchMedicineFuse(drugName: string, limit = 6): Promise<Ar
   return results.map((r: { item: IndexableProduct; score?: number }) => ({
     _id: String(r.item._id),
     name: r.item.name,
+    genericName: r.item.genericName,
+    brandName: r.item.brandName,
+    strength: r.item.strength,
+    dosageForm: r.item.dosageForm,
     price: Number(r.item.price ?? 0),
+    salePrice: r.item.salePrice ?? null,
     stock: Number(r.item.stockQty ?? 0),
     score: Number(1 - (r.score ?? 1)),
   }));

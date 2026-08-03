@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import PrescriptionOrder from "../prescriptionOrder/prescriptionOrder.schema";
 import Order from "../order/Order.schema";
+import Product from "../product/Product.schema";
 import { ApiError, paginate } from "../../shared/utils";
 
 export const formatPrescriptionOrderForPharmacist = (prescription: any) => {
@@ -9,12 +10,48 @@ export const formatPrescriptionOrderForPharmacist = (prescription: any) => {
   const user = prescription.user?.userId || prescription.user || {};
   const address = prescription.address || {};
 
+  const normalizeName = (value: any) =>
+    String(value || '')
+      .trim()
+      .replace(/^[\.\s-]+/, '')
+      .trim();
+
+  const normalizedSuggestedMedicines = Array.isArray(prescription.suggestedMedicines)
+    ? prescription.suggestedMedicines
+        .map((medicine: any) => ({
+          ...medicine,
+          id: medicine?.id || medicine?._id || medicine?.medicineId || null,
+          medicineId: medicine?.medicineId || medicine?.id || medicine?._id || null,
+          ocrName: String(medicine?.rawText || medicine?.name || ''),
+          name: normalizeName(medicine?.name || medicine?.rawText || ''),
+          quantity: Number(medicine?.quantity || medicine?.qty || 1),
+        }))
+        .filter((medicine: any) => {
+          const name = String(medicine?.name || '').trim();
+          const lowerName = name.toLowerCase();
+
+          if (!medicine.id || !name || name.length < 2) return false;
+          if (
+            lowerName.includes('document') ||
+            lowerName.includes('fictitious') ||
+            lowerName.includes('sample') ||
+            lowerName.includes('repeat') ||
+            lowerName.includes('medical record') ||
+            lowerName.includes('software')
+          ) {
+            return false;
+          }
+
+          return true;
+        })
+    : [];
+
   return {
     _id: prescription._id,
     prescriptionImageUrl: prescription.prescriptionImageUrl || prescription.prescriptionFile || "",
     prescriptionFile: prescription.prescriptionFile || "",
     extractedText: prescription.extractedText || "",
-    suggestedMedicines: prescription.suggestedMedicines || [],
+    suggestedMedicines: normalizedSuggestedMedicines,
     medicines: prescription.medicines || [],
     customerName: user.name || "",
     customerPhone: user.phone || "",
@@ -55,19 +92,50 @@ export const formatOrderForPharmacist = (order: any) => {
   };
 };
 
-export const buildFulfillmentOrderData = (prescription: any, medicines: any[] = [], notes = "") => {
+export const buildFulfillmentOrderData = async (prescription: any, medicines: any[] = [], notes = "") => {
   const user = prescription?.user?.userId || prescription?.user || {};
   const address = prescription?.address || {};
-  const normalizedMedicines = (medicines || []).map((medicine: any) => ({
-    medicineId: medicine.medicineId ? new mongoose.Types.ObjectId(medicine.medicineId) : null,
-    name: String(medicine.name || ""),
-    dosage: String(medicine.dosage || ""),
-    quantity: Number(medicine.quantity || 1),
-    price: Number(medicine.price || 0),
-    salePrice: Number(medicine.salePrice || medicine.price || 0),
-    requiresPrescription: Boolean(medicine.requiresPrescription || false),
-    status: "active",
-  }));
+
+  // Collect product IDs to enrich medicines where possible
+  const productIds: string[] = (medicines || [])
+    .map((m: any) => m?.medicineId || m?.id)
+    .filter((id: any) => id && mongoose.Types.ObjectId.isValid(String(id)))
+    .map((id: any) => String(id));
+
+  let productMap = new Map<string, any>();
+  if (productIds.length > 0) {
+    const products = await Product.find({ _id: { $in: productIds } })
+      .select('name genericName brandName strength price salePrice stockQty images dosageForm')
+      .lean();
+    productMap = new Map(products.map((p: any) => [String(p._id), p]));
+  }
+
+  const normalizedMedicines = (medicines || []).map((medicine: any) => {
+    const mid = medicine?.medicineId || medicine?.id || null;
+    const product = mid ? productMap.get(String(mid)) : null;
+
+    const name = String(medicine.name || (product && product.name) || "");
+    const dosage = String(medicine.dosage || medicine.strength || (product && product.strength) || "");
+    const quantity = Number(medicine.quantity || 1);
+    const price = Number(medicine.price ?? (product && product.price) ?? 0);
+    const salePrice = Number(medicine.salePrice ?? (product && product.salePrice) ?? price);
+
+    return {
+      medicineId: mid ? new mongoose.Types.ObjectId(mid) : null,
+      name,
+      dosage,
+      quantity,
+      price,
+      salePrice,
+      images: medicine.images || (product && product.images) || [],
+      genericName: medicine.genericName || (product && product.genericName) || "",
+      brandName: medicine.brandName || (product && product.brandName) || "",
+      strength: medicine.strength || (product && product.strength) || "",
+      stockQty: Number((product && product.stockQty) ?? 0),
+      requiresPrescription: Boolean(medicine.requiresPrescription || false),
+      status: 'active',
+    };
+  });
 
   const totalAmount = normalizedMedicines.reduce(
     (sum, medicine) => sum + Number(medicine.price || 0) * Number(medicine.quantity || 1),
@@ -203,19 +271,67 @@ export class PharmacistService {
   /**
    * Get single prescription order details
    */
-  static async getPrescriptionOrder(prescriptionId: string) {
+  static async  getPrescriptionOrder(prescriptionId: string) {
     try {
       if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
         throw new ApiError(400, "Invalid prescription ID");
       }
 
-      const prescription = await PrescriptionOrder.findById(prescriptionId)
+      const prescription = (await PrescriptionOrder.findById(prescriptionId)
         .populate("user.userId", "name email phone address")
         .populate("medicines.medicineId", "name genericName price salePrice")
-        .lean();
+        .lean()) as any;
 
       if (!prescription) {
         throw new ApiError(404, "Prescription not found");
+      }
+
+      const suggestedIds = Array.isArray(prescription.suggestedMedicines)
+        ? prescription.suggestedMedicines
+            .map((medicine: any) => medicine?.id || medicine?._id || medicine?.medicineId)
+            .filter((id: any) => mongoose.Types.ObjectId.isValid(String(id)))
+        : [];
+
+      if (suggestedIds.length > 0) {
+        const products = await Product.find({ _id: { $in: suggestedIds } })
+          .select("name genericName brandName strength price salePrice stockQty")
+          .lean();
+        const productMap = new Map(products.map((product: any) => [String(product._id), product]));
+
+        prescription.suggestedMedicines = (prescription.suggestedMedicines || []).map((medicine: any) => {
+          const id = String(medicine?.id || medicine?._id || medicine?.medicineId || '');
+          const product = productMap.get(id);
+          const cleanedName = String(medicine?.name || medicine?.rawText || '')
+            .replace(/^[\.\s-]+/, '')
+            .trim();
+          const quantity = Number(medicine?.quantity || medicine?.qty || 1);
+
+          if (!product) {
+            return {
+              ...medicine,
+              id,
+              medicineId: id,
+              name: cleanedName,
+              quantity,
+            };
+          }
+
+          return {
+            ...medicine,
+            id,
+            medicineId: id,
+            name: product.name,
+            genericName: product.genericName || '',
+            brandName: product.brandName || '',
+            strength: product.strength || '',
+            dosage: medicine?.dosage || product.strength || '',
+            price: Number(product.salePrice ?? product.price ?? medicine?.price ?? 0),
+            salePrice: Number(product.salePrice ?? product.price ?? medicine?.salePrice ?? medicine?.price ?? 0),
+            stockQty: Number(product.stockQty ?? 0),
+            available: Number(product.stockQty ?? 0) > 0,
+            quantity,
+          };
+        });
       }
 
       return formatPrescriptionOrderForPharmacist(prescription);
@@ -255,6 +371,7 @@ export class PharmacistService {
             name: String(medicine.name || ""),
             genericName: String(medicine.genericName || ""),
             brandName: String(medicine.brandName || ""),
+            dosage: String(medicine.dosage || medicine.strength || ""),
             quantity: Number(medicine.quantity || 1),
             price: Number(medicine.price || 0),
             salePrice: Number(medicine.salePrice || medicine.price || 0),
@@ -280,7 +397,7 @@ export class PharmacistService {
       const existingFulfillmentOrder = await Order.findOne({ prescriptionOrderId: prescriptionIdValue }).lean();
       const fulfillmentOrder = existingFulfillmentOrder
         ? existingFulfillmentOrder
-        : await Order.create(buildFulfillmentOrderData(updatedPrescription, medicines, verificationNotes || ""));
+        : await Order.create(await buildFulfillmentOrderData(updatedPrescription, medicines, verificationNotes || ""));
 
       const responsePayload = {
         ...formatPrescriptionOrderForPharmacist(updatedPrescription),
@@ -404,7 +521,10 @@ export class PharmacistService {
 
       const order = await Order.findById(orderId)
         .populate("user", "name email phone address")
-        .populate("medicines.medicineId", "name genericName price salePrice quantity")
+        .populate(
+          "medicines.medicineId",
+          "name genericName brandName strength price salePrice stockQty images dosageForm"
+        )
         .lean();
 
       if (!order) {

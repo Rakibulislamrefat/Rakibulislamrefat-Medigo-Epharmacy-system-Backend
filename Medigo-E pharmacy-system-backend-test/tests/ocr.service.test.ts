@@ -47,14 +47,11 @@ test("matchMedicinesFromText fuzzy-matches OCR-garbled names", async () => {
   assert.ok(results[0].matchConfidence > 0);
 });
 
-test("matchMedicinesFromText returns an unmatched item with null id for missing products", async () => {
+test("matchMedicinesFromText returns no suggestions when no matching product exists", async () => {
   mockProducts([]);
 
   const results = await OCRService.matchMedicinesFromText("UnknownDrug 500mg 1+0+1 for 5 days");
-  assert.equal(results.length, 1);
-  assert.equal(results[0].id, null);
-  assert.equal(results[0].available, false);
-  assert.equal(results[0].matchConfidence, 0);
+  assert.deepEqual(results, []);
 });
 
 test("parseMedicinesFromText skips non-medicine lines", () => {

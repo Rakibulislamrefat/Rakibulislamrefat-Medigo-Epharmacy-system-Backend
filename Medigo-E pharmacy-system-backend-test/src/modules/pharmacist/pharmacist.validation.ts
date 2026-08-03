@@ -3,7 +3,7 @@ import { z } from "zod";
 export const medicineSchema = z.object({
   medicineId: z.string().optional(),
   name: z.string().min(1, "Medicine name is required"),
-  dosage: z.string().min(1, "Dosage is required"),
+  dosage: z.string().optional(),
   quantity: z.union([z.string(), z.number()]).refine(
     (val) => {
       const num = typeof val === "string" ? parseInt(val) : val;

@@ -7,12 +7,17 @@ export type SuggestedMedicine = {
   id: string | null;
   rawText: string;
   name: string;
+  genericName?: string;
+  brandName?: string;
+  strength?: string;
   dosage: string;
   quantity: number;
   price: number | null;
+  salePrice?: number | null;
   stockQty: number;
   available: boolean;
   matchConfidence: number;
+  productInfo?: Record<string, any> | null;
 };
 
 export class OCRService {
@@ -83,26 +88,45 @@ export class OCRService {
         lower.includes('follow up') ||
         lower.includes('note') ||
         lower.includes('pharmacy') ||
+        lower.includes('sample') ||
+        lower.includes('fictitious') ||
+        lower.includes('document') ||
+        lower.includes('medical record') ||
+        lower.includes('repeat') ||
+        lower.includes('created') ||
+        lower.includes('software') ||
+        lower.includes('testing') ||
         lower.startsWith('dr.') ||
         lower.startsWith('dr')
       ) {
         continue;
       }
 
-      const hasMedicineEvidence = /\d+(?:\.\d+)?\s*(?:mg|g|mcg|ml|iu)|\d+\s*[+\-]\s*\d+\s*[+\-]\s*\d+|x\s*\d+|for\b|days?|weeks?|months?|after|before|meal|meals|tablet|capsule|syrup|injection|spray/i.test(line);
+      const hasMedicineEvidence = /\b(?:\d+(?:\.\d+)?\s*(?:mg|g|mcg|ml|iu)|\d+\s*[+\-]\s*\d+\s*[+\-]\s*\d+|x\s*\d+|(?:tablet|capsule|syrup|injection|tab|cap|syp|inj|spray|drop|cream)\b|\b(?:od|bd|tid|qid|hs|ac|pc|stat)\b|\b(?:after|before)\s+(?:\d+\s*)?(?:meals?|days?|weeks?|months?)\b)/i.test(line);
       if (!hasMedicineEvidence) continue;
 
       const cleanedLine = line.replace(/^\d+[.):-]\s*/i, '').trim();
       const match = cleanedLine.match(/^([A-Za-z][A-Za-z0-9 .()-]+?)(?=\s+(?:\d+(?:\.\d+)?\s*(?:mg|g|mcg|ml|iu)|\d+\s*[+\-]\s*\d+\s*[+\-]\s*\d+|x\s*\d+|for\b|days?|weeks?|months?|after|before|meal|meals))/i);
 
-      const rawName = (match?.[1] || cleanedLine)
-        .replace(/\b(tab|cap|syp|inj|tablet|capsule|syrup|injection)\.?\b/gi, '')
+      let rawName = (match?.[1] || cleanedLine)
+        .replace(/\b(tab|cap|syp|inj|tablet|capsule|syrup|injection)\.??\b/gi, '')
+        .replace(/\d+\s*[+\-]\s*\d+\s*[+\-]\s*\d+(?:tsf)?/gi, '')
+        .replace(/\b(after|before|for|as needed|at night|at morning|after meals|before breakfast|after lunch|after dinner|at night|at morning|at noon)\b.*$/i, '')
+        .replace(/^[\s\.\-]+/, '')
         .replace(/\s+/g, ' ')
         .trim();
       const dosageMatch = cleanedLine.match(/(\d+(?:\.\d+)?\s*(?:mg|g|mcg|ml|iu))/i);
       const dosage = dosageMatch?.[1] || '';
+      const frequencyMatch = cleanedLine.match(/(\d+(?:tsf)?)[+\-](\d+(?:tsf)?)[+\-](\d+(?:tsf)?)/i);
       const quantityMatch = cleanedLine.match(/(?:x|X)\s*(\d+)/i);
-      const quantity = quantityMatch?.[1] || '1';
+      const quantity = frequencyMatch
+        ? String(
+            [frequencyMatch[1], frequencyMatch[2], frequencyMatch[3]].reduce(
+              (sum, part) => sum + Number(String(part).replace(/\D/g, '')),
+              0
+            )
+          )
+        : quantityMatch?.[1] || '1';
 
       if (!rawName || rawName.length < 2) continue;
 
@@ -122,7 +146,7 @@ export class OCRService {
     const parsedMedicines = this.parseMedicinesFromText(text);
 
     const products = await Product.find({ status: 'active' })
-      .select('_id name genericName brandName strength price salePrice stockQty')
+      .select('_id name genericName brandName strength dosageForm price salePrice stockQty manufacturer categories tags images sku otc requiresPrescription currency')
       .lean();
 
     const indexableProducts = (products || []).map((product: any) => ({
@@ -131,8 +155,11 @@ export class OCRService {
       genericName: product.genericName || '',
       brandName: product.brandName || '',
       strength: product.strength || '',
+      dosageForm: product.dosageForm || 'other',
       price: Number(product.salePrice ?? product.price ?? 0),
+      salePrice: product.salePrice ?? null,
       stockQty: Number(product.stockQty ?? 0),
+      productInfo: product,
     }));
 
     const fuse = new Fuse(indexableProducts, {
@@ -143,7 +170,9 @@ export class OCRService {
       minMatchCharLength: 3,
     });
 
-    return parsedMedicines.map((item) => {
+    const suggestions: SuggestedMedicine[] = [];
+
+    for (const item of parsedMedicines) {
       const normalizedName = this.normalizeName(item.name);
       const cleanedLine = normalizedName || this.normalizeName(item.dosage || item.name);
       const searchResults = cleanedLine ? fuse.search(cleanedLine) : [];
@@ -152,23 +181,65 @@ export class OCRService {
       const matchConfidence = Number(Math.max(0, 1 - rawScore).toFixed(2));
       const product = topResult?.item as any;
 
-      const isConfident = Boolean(product && matchConfidence >= 0.2);
+      if (!product?._id) {
+        suggestions.push({
+          id: null,
+          rawText: item.name,
+          name: item.name,
+          dosage: item.dosage || '',
+          quantity: Number(item.quantity || 1),
+          price: null,
+          salePrice: null,
+          stockQty: 0,
+          available: false,
+          matchConfidence: 0,
+          productInfo: null,
+        });
+        continue;
+      }
+
+      const isConfident = matchConfidence >= 0.2;
       const stockQty = Number(product?.stockQty ?? 0);
-      const available = Boolean(product && stockQty > 0 && isConfident);
+      const available = Boolean(stockQty > 0 && isConfident);
       const price = product ? Number(product.price ?? 0) : null;
 
-      return {
-        id: product ? String(product._id) : null,
+      suggestions.push({
+        id: String(product._id),
         rawText: item.name,
-        name: item.name,
+        name: product.name || item.name,
+        genericName: product.genericName || undefined,
+        brandName: product.brandName || undefined,
+        strength: product.strength || undefined,
         dosage: item.dosage || '',
         quantity: Number(item.quantity || 1),
         price,
+        salePrice: product.salePrice ?? null,
         stockQty,
         available,
         matchConfidence: isConfident ? matchConfidence : 0,
-      };
-    });
+        productInfo: {
+          _id: String(product._id),
+          name: product.name,
+          genericName: product.genericName,
+          brandName: product.brandName,
+          strength: product.strength,
+          dosageForm: product.dosageForm,
+          price: Number(product.price ?? 0),
+          salePrice: product.salePrice ?? null,
+          stockQty,
+          manufacturer: product.manufacturer,
+          categories: product.categories,
+          tags: product.tags,
+          images: product.images,
+          sku: product.sku,
+          otc: product.otc,
+          requiresPrescription: product.requiresPrescription,
+          currency: product.currency,
+        },
+      });
+    }
+
+    return suggestions;
   }
 
   /**

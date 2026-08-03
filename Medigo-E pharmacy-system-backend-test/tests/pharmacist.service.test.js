@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 require('ts-node/register/transpile-only');
 const { buildFulfillmentOrderData } = require('../src/modules/pharmacist/pharmacist.service');
 
-test('buildFulfillmentOrderData maps verified medicines into a fulfillment payload', () => {
+test('buildFulfillmentOrderData maps verified medicines into a fulfillment payload', async () => {
   const prescription = {
     _id: '64f000000000000000000001',
     user: {
@@ -25,7 +25,7 @@ test('buildFulfillmentOrderData maps verified medicines into a fulfillment paylo
     { name: 'Paracetamol', dosage: '650mg', quantity: 1, price: 30 },
   ];
 
-  const payload = buildFulfillmentOrderData(prescription, medicines, 'Approved by pharmacist');
+  const payload = await buildFulfillmentOrderData(prescription, medicines, 'Approved by pharmacist');
 
   assert.equal(payload.status, 'pending_pickup');
   assert.equal(payload.totalAmount, 130);
