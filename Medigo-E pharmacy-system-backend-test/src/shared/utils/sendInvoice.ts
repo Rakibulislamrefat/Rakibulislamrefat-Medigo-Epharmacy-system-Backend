@@ -32,8 +32,8 @@ const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
       <tr>
         <td style="border: 1px solid #ddd; padding: 8px;">${item.name}</td>
         <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${item.quantity}</td>
-        <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">৳ ${item.price?.toFixed(2) || "N/A"}</td>
-        <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">৳ ${((item.price || 0) * item.quantity).toFixed(2)}</td>
+        <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">BDT ${item.price?.toFixed(2) || "N/A"}</td>
+        <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">BDT ${((item.price || 0) * item.quantity).toFixed(2)}</td>
       </tr>
     `
     )
@@ -200,7 +200,7 @@ const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
               ${itemsHTML}
               <tr class="total-row">
                 <td colspan="3" style="border: 1px solid #ddd; padding: 8px; text-align: right;">Total Amount:</td>
-                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">৳ ${totalAmount.toFixed(2)}</td>
+                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">BDT ${totalAmount.toFixed(2)}</td>
               </tr>
             </tbody>
           </table>

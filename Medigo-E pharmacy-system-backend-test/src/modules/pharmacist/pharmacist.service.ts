@@ -647,11 +647,16 @@ export class PharmacistService {
       // Generate PDF invoice and save to /invoices
       const orderIdValue = (order as any)?._id ?? orderId;
       const invoiceId = `INV-${orderIdValue}`;
+      const computedTotalAmount = ((order as any).medicines || []).reduce((sum: number, m: any) => {
+        const qty = Number(m.quantity ?? 1);
+        const unitPrice = Number(m.price ?? m.medicineId?.salePrice ?? m.medicineId?.price ?? 0) || 0;
+        return sum + unitPrice * qty;
+      }, 0);
       const invoiceData = {
         invoiceId,
         invoiceDate: new Date().toISOString(),
         order,
-        totalAmount: (order as any).totalAmount || 0,
+        totalAmount: Number((order as any).totalAmount ?? (order as any).grandTotal ?? computedTotalAmount) || computedTotalAmount,
       };
 
       // Ensure invoices directory exists at project root
@@ -665,28 +670,84 @@ export class PharmacistService {
 
       try {
         const PDFDocument = require("pdfkit");
-        const doc = new PDFDocument();
+        const doc = new PDFDocument({ margin: 50 });
         const writeStream = fs.createWriteStream(pdfPath);
         doc.pipe(writeStream);
 
-        doc.fontSize(18).text("Medigo Order Invoice", { align: "center" });
-        doc.moveDown();
-        doc.fontSize(12).text(`Invoice ID: ${invoiceId}`);
-        doc.text(`Invoice Date: ${new Date().toLocaleString()}`);
-        doc.text(`Order ID: ${orderIdValue}`);
-        doc.text(`Customer: ${(order as any).user?.name || ""}`);
-        doc.moveDown();
-        doc.text("Items:");
+        const invoiceDate = new Date();
+        doc.fontSize(18).text("Medigo E-Pharmacy Invoice", { align: "center" });
+        doc.moveDown(0.5);
 
-        (order as any).medicines?.forEach((m: any) => {
-          const name = m.medicineId?.name || "";
-          const qty = m.quantity ?? 1;
-          const price = m.price ?? m.medicineId?.price ?? 0;
-          doc.text(`- ${name} x ${qty} — ${price}`);
+        const customerName = (order as any).user?.name || (order as any).contactName || "Customer";
+        const customerEmail = (order as any).user?.email || "";
+        const customerPhone = (order as any).user?.phone || "";
+        const customerAddress = (order as any).user?.address || "";
+
+        doc.fontSize(10).text(`Invoice ID: ${invoiceId}`, 50, doc.y);
+        doc.text(`Date: ${invoiceDate.toLocaleDateString()} ${invoiceDate.toLocaleTimeString()}`, 350, doc.y, {
+          width: 180,
+          align: "right",
         });
 
-        doc.moveDown();
-        doc.text(`Total: ${invoiceData.totalAmount}`);
+        doc.moveDown(0.5);
+        doc.fontSize(10).text(`Order ID: ${orderIdValue}`);
+        doc.text(`Customer: ${customerName}`);
+        if (customerEmail) doc.text(`Email: ${customerEmail}`);
+        if (customerPhone) doc.text(`Phone: ${customerPhone}`);
+        if (customerAddress) doc.text(`Address: ${customerAddress}`);
+
+        doc.moveDown(0.5);
+        doc.fontSize(12).fillColor("#000").text("Order Items", { underline: true });
+        doc.moveDown(0.3);
+
+        const tableTop = doc.y;
+        const itemX = 50;
+        const qtyX = 310;
+        const unitPriceX = 380;
+        const totalX = 470;
+
+        doc.fontSize(10).font("Helvetica-Bold");
+        doc.text("Medicine", itemX, tableTop);
+        doc.text("Qty", qtyX, tableTop, { width: 50, align: "center" });
+        doc.text("Unit Price", unitPriceX, tableTop, { width: 70, align: "right" });
+        doc.text("Total", totalX, tableTop, { width: 80, align: "right" });
+
+        const rowTop = tableTop + 20;
+        doc.moveTo(itemX, rowTop - 5).lineTo(545, rowTop - 5).stroke();
+
+        let currentY = rowTop;
+        doc.font("Helvetica");
+
+        (order as any).medicines?.forEach((m: any) => {
+          const name = m.medicineId?.name || "Unknown medicine";
+          const qty = m.quantity ?? 1;
+          const unitPrice = Number(m.price ?? m.medicineId?.salePrice ?? m.medicineId?.price ?? 0) || 0;
+          const lineTotal = unitPrice * qty;
+
+          doc.text(name, itemX, currentY, { width: 250 });
+          doc.text(String(qty), qtyX, currentY, { width: 50, align: "center" });
+          doc.text(`BDT ${unitPrice.toFixed(2)}`, unitPriceX, currentY, { width: 70, align: "right" });
+          doc.text(`BDT ${lineTotal.toFixed(2)}`, totalX, currentY, { width: 80, align: "right" });
+
+          currentY += 18;
+        });
+
+        doc.moveTo(itemX, currentY + 4).lineTo(545, currentY + 4).stroke();
+        currentY += 10;
+
+        doc.font("Helvetica-Bold");
+        doc.text("Total Amount", itemX, currentY, { width: 380, align: "right" });
+        doc.text(`BDT ${Number(invoiceData.totalAmount || 0).toFixed(2)}`, totalX, currentY, {
+          width: 80,
+          align: "right",
+        });
+
+        doc.moveDown(1.5);
+        doc.font("Helvetica").fontSize(10).text("Thank you for choosing Medigo E-Pharmacy.", { align: "left" });
+        doc.text("If you have any questions about this invoice, please contact support@medigo.com.", {
+          align: "left",
+        });
+
         doc.end();
 
         await new Promise((resolve, reject) => {
