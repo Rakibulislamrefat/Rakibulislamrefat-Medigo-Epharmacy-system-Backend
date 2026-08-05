@@ -20,6 +20,13 @@ import {
   updateProduct,
   deleteProduct,
 } from "../product/product.controller";
+import {
+  createSpecialOffer,
+  deleteSpecialOffer,
+  listSpecialOffers,
+  updateSpecialOffer,
+  getSpecialOffer,
+} from "../specialOffer/specialOffer.controller";
 import { protect, authorize } from "../../middleware";
 
 const router = Router();
@@ -55,5 +62,12 @@ router.get("/doctors", authorize("admin"), getAdminDoctors);
 router.get("/consultancies", authorize("admin"), getAdminConsultancies);
 router.post("/consultancies", authorize("admin"), createAdminConsultancy);
 router.patch("/consultancies/:id", authorize("admin"), updateAdminConsultancy);
+
+// Special Offers - Admin only
+router.get("/special-offers", listSpecialOffers);
+router.get("/special-offers/:id", getSpecialOffer);
+router.post("/special-offers", authorize("admin"), createSpecialOffer);
+router.patch("/special-offers/:id", authorize("admin"), updateSpecialOffer);
+router.delete("/special-offers/:id", authorize("admin"), deleteSpecialOffer);
 
 export default router;

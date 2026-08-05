@@ -18,12 +18,14 @@ import configRoutes from "../modules/config/config.routes";
 import requestOrderRoutes from "../modules/requestOrder/requestOrder.routes";
 import prescriptionOrderRoutes from "../modules/prescriptionOrder/prescriptionOrder.route";
 import pharmacistRoutes from "../modules/pharmacist/pharmacist.route";
+import specialOfferRoutes from "../modules/specialOffer/specialOffer.routes";
 
 const router = Router();
 
 router.use("/auth", authRoutes);
 router.use("/config", configRoutes);
 router.use("/admin", adminRoutes);
+router.use("/special-offers", specialOfferRoutes);
 router.use("/pharmacist", pharmacistRoutes);
 router.use("/users", userRoutes);
 router.use("/products", productRoutes);
