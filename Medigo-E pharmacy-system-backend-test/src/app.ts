@@ -1,4 +1,5 @@
 import express from "express";
+import path from "path";
 import corsMiddleware from "./config/cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -18,6 +19,8 @@ app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+// Serve generated invoice PDFs from the /invoices folder
+app.use("/invoices", express.static(path.join(__dirname, "..", "invoices")));
 app.use("/api/v1/orders", requireAuth, orderRoutes);
 app.use("/api/v1", router);
 app.use(errorHandler);

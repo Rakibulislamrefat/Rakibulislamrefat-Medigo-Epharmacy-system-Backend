@@ -32,6 +32,7 @@
     "sslcommerz-lts": "^1.2.0",
     "tesseract.js": "^7.0.0",
     "ua-parser-js": "^1.0.37",
+    "pdfkit": "^0.13.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {

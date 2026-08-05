@@ -2,7 +2,9 @@ import mongoose from "mongoose";
 import PrescriptionOrder from "../prescriptionOrder/prescriptionOrder.schema";
 import Order from "../order/Order.schema";
 import Product from "../product/Product.schema";
-import { ApiError, paginate } from "../../shared/utils";
+import { ApiError, paginate, sendEmail } from "../../shared/utils";
+import fs from "fs";
+import path from "path";
 
 export const formatPrescriptionOrderForPharmacist = (prescription: any) => {
   if (!prescription) return prescription;
@@ -593,6 +595,24 @@ export class PharmacistService {
         .populate("medicines.medicineId", "name")
         .lean();
 
+      // Notify user via email about status update
+      try {
+        const userEmail = (updatedOrder as any)?.user?.email;
+        const customerName = (updatedOrder as any)?.user?.name || (updatedOrder as any)?.contactName || "Customer";
+        if (userEmail) {
+          const subject = `Your order ${(updatedOrder as any)?.orderNumber || String((updatedOrder as any)?._id)} is now ${newStatus.replace(/_/g, ' ')}`;
+          const html = `<p>Hi ${customerName},</p>
+            <p>Your order <strong>${(updatedOrder as any)?.orderNumber || String((updatedOrder as any)?._id)}</strong> status has been updated to <strong>${newStatus.replace(/_/g, ' ')}</strong>.</p>
+            <p>You can view your order details in the app. If you have any questions, reply to this email.</p>
+            <p>Thanks,<br/>Medigo E-Pharmacy</p>`;
+          // fire-and-forget; log errors
+          sendEmail({ to: userEmail, subject, html }).catch((err) => {
+            console.error("Failed to send order status email:", err);
+          });
+        }
+      } catch (err) {
+        console.error("Error while attempting to send order status email:", err);
+      }
       // TODO: Send notification to user about status update
       // notificationService.sendOrderStatusUpdate(order.user.email, newStatus);
 
@@ -624,11 +644,9 @@ export class PharmacistService {
         throw new ApiError(404, "Order not found");
       }
 
-      // TODO: Generate PDF or HTML invoice
-      // For now, return invoice data structure
+      // Generate PDF invoice and save to /invoices
       const orderIdValue = (order as any)?._id ?? orderId;
       const invoiceId = `INV-${orderIdValue}`;
-      const invoiceUrl = `${process.env.API_URL || "http://localhost:5000"}/invoices/${invoiceId}.pdf`;
       const invoiceData = {
         invoiceId,
         invoiceDate: new Date().toISOString(),
@@ -636,7 +654,51 @@ export class PharmacistService {
         totalAmount: (order as any).totalAmount || 0,
       };
 
-      // TODO: Save invoice to storage or S3
+      // Ensure invoices directory exists at project root
+      const invoicesDir = path.join(__dirname, "..", "..", "..", "invoices");
+      if (!fs.existsSync(invoicesDir)) {
+        fs.mkdirSync(invoicesDir, { recursive: true });
+      }
+
+      const invoiceFilename = `${invoiceId}.pdf`;
+      const pdfPath = path.join(invoicesDir, invoiceFilename);
+
+      try {
+        const PDFDocument = require("pdfkit");
+        const doc = new PDFDocument();
+        const writeStream = fs.createWriteStream(pdfPath);
+        doc.pipe(writeStream);
+
+        doc.fontSize(18).text("Medigo Order Invoice", { align: "center" });
+        doc.moveDown();
+        doc.fontSize(12).text(`Invoice ID: ${invoiceId}`);
+        doc.text(`Invoice Date: ${new Date().toLocaleString()}`);
+        doc.text(`Order ID: ${orderIdValue}`);
+        doc.text(`Customer: ${(order as any).user?.name || ""}`);
+        doc.moveDown();
+        doc.text("Items:");
+
+        (order as any).medicines?.forEach((m: any) => {
+          const name = m.medicineId?.name || "";
+          const qty = m.quantity ?? 1;
+          const price = m.price ?? m.medicineId?.price ?? 0;
+          doc.text(`- ${name} x ${qty} — ${price}`);
+        });
+
+        doc.moveDown();
+        doc.text(`Total: ${invoiceData.totalAmount}`);
+        doc.end();
+
+        await new Promise((resolve, reject) => {
+          writeStream.on("finish", () => resolve(undefined));
+          writeStream.on("error", (err) => reject(err));
+        });
+      } catch (err) {
+        // If PDF generation fails, still return invoice metadata
+        console.error("Failed to generate PDF invoice:", err);
+      }
+
+      const invoiceUrl = `${process.env.API_URL || "http://localhost:5000"}/invoices/${invoiceFilename}`;
 
       return {
         success: true,
