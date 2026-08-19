@@ -8,6 +8,7 @@ import {
   getUserById,
   promoteToAdmin,
   updateAvatar,
+  updateMyProfile,
   updateUserStatus,
 } from "./user.controller";
 
@@ -17,6 +18,11 @@ router.post("/dev/promote-admin", promoteToAdmin);
 
 // Get current user's profile
 router.get("/me/profile", protect, getMyProfile);
+router.put("/me/profile", protect, updateMyProfile);
+
+// Backward-compatible profile endpoints used by the web client.
+router.get("/profile", protect, getMyProfile);
+router.put("/profile", protect, updateMyProfile);
 
 // Upload/update profile picture
 router.post("/me/avatar", protect, upload.avatar, updateAvatar);

@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { ApiError, ApiResponse, asyncHandler } from "../../shared/utils";
 import { UserService } from "./user.service";
+import { logActivity } from "./activity.logger";
 
 export const getUserById = asyncHandler(async (req: Request, res: Response) => {
   const data = await UserService.getPublicProfile(req.params.id);
@@ -10,8 +11,17 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
 export const getMyProfile = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.id;
   if (!userId) throw new ApiError(401, "Not authenticated");
-  const data = await UserService.getPublicProfile(userId);
+  const data = await UserService.getMyProfile(userId);
   res.status(200).json(new ApiResponse(200, "Profile fetched", data));
+});
+
+export const updateMyProfile = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) throw new ApiError(401, "Not authenticated");
+
+  const data = await UserService.updateMyProfile(userId, req.body || {});
+  await logActivity(req, { userId, event: "profile_update", meta: { fields: Object.keys(req.body || {}) } });
+  res.status(200).json(new ApiResponse(200, "Profile updated", data));
 });
 
 export const getAllUsers = asyncHandler(async (req: Request, res: Response) => {
