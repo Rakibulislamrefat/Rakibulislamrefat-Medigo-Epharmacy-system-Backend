@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Order from "./Order.schema";
 import Product from "../product/Product.schema";
+import SpecialOffer from "../specialOffer/SpecialOffer.schema";
 import Coupon from "../coupon/Coupon.schema";
 import Cart from "../cart/Cart.schema";
 import PaymentTransaction from "../paymentTransaction/PaymentTransaction.schema";
@@ -294,8 +295,43 @@ export class OrderService {
     }
 
     const subtotal = orderItems.reduce((sum: number, it: any) => sum + Number(it.lineTotal), 0);
-    const delivery = Number(deliveryFee || 0);
-    const discount = appliedCoupon ? await computeCouponDiscount(String(appliedCoupon), subtotal) : 0;
+    let delivery = Number(deliveryFee || 0);
+
+    // Determine discount. `appliedCoupon` may be a coupon id (ObjectId) or a special offer code (string)
+    let discount = 0;
+    let appliedCouponRef: any = null;
+    if (appliedCoupon) {
+      const asId = String(appliedCoupon);
+      if (isValidId(asId)) {
+        discount = await computeCouponDiscount(asId, subtotal);
+        appliedCouponRef = asId;
+      } else {
+        // try special offers by code
+        const code = String(appliedCoupon).toUpperCase().trim();
+        const special = await SpecialOffer.findOne({ code });
+        if (special) {
+          appliedCouponRef = special._id;
+          const label = String(special.discount || "").toUpperCase();
+          // percentage e.g. "15% OFF"
+          const pctMatch = label.match(/(\d+)%/);
+          if (pctMatch) {
+            const pct = Number(pctMatch[1] || 0);
+            discount = +(subtotal * (pct / 100));
+          } else if (label.includes("FREE DELIVERY")) {
+            // free delivery -> discount equals delivery fee (set delivery to 0)
+            discount = 0;
+            delivery = 0;
+          } else {
+            // try to parse numeric amount from label
+            const numMatch = label.match(/(\d+[\.,]?\d*)/);
+            if (numMatch) {
+              discount = Number(numMatch[1].replace(/,/g, "")) || 0;
+            }
+          }
+        }
+      }
+    }
+
     const grandTotal = Math.max(subtotal + delivery - discount, 0);
     const prescriptionRequired = products.some((p: any) => Boolean(p.requiresPrescription));
 
@@ -315,9 +351,12 @@ export class OrderService {
       notes: notes || "",
       prescriptionRequired,
       prescription: prescription || null,
-      appliedCoupon: appliedCoupon || null,
+      appliedCoupon: appliedCouponRef || null,
       paymentInfo: paymentInfo || null,
     });
+
+    // populate appliedCoupon for response so frontend can show details
+    const populated = await Order.findById(created._id).populate("appliedCoupon");
 
     await Cart.findOneAndUpdate({ user: userId }, { $set: { items: [] } });
 
@@ -327,10 +366,10 @@ export class OrderService {
         PaymentTransaction.findOne({ order: created._id, status: "success" }).sort({ createdAt: -1 }),
       ]);
 
-      sendPaidOrderInvoice(created, paymentTx).catch(() => {});
+      sendPaidOrderInvoice(populated || created, paymentTx).catch(() => {});
     }
 
-    return created;
+    return populated || created;
   }
 
   static async listForUser(userId: string, query: any) {
@@ -375,24 +414,33 @@ export class OrderService {
     const order: any = await Order.findOne(filter).populate("items.product appliedCoupon prescription");
     if (!order) throw new ApiError(404, "Order not found for this user");
 
-    const statusFlow = ["pending", "confirmed", "processing", "ready", "shipped", "delivered"];
+    // Determine expected status flow based on order number prefix (FUL vs MDG)
+    const FUL_FLOW = ["pending_pickup", "picked", "packed", "ready_for_delivery", "delivered"];
+    const MDG_REQUEST_FLOW = ["pending", "confirmed", "processing", "ready", "shipped", "delivered"];
     const terminalStatuses = ["cancelled", "refunded"];
+
+    const orderNumberUpper = String(order.orderNumber || "").toUpperCase();
+    const isFul = orderNumberUpper.startsWith("FUL");
+    const statusFlow = isFul ? FUL_FLOW : MDG_REQUEST_FLOW;
+
     const currentStatus = String(order.status);
-    const currentIndex = statusFlow.indexOf(currentStatus);
+    const normalize = (s: any) => String(s || "").toLowerCase().trim();
+    const currentIndex = statusFlow.findIndex((s) => normalize(s) === normalize(currentStatus));
 
     const timeline = statusFlow.map((status, index) => ({
       status,
-      completed: currentIndex >= index,
-      current: currentStatus === status,
+      completed: currentIndex >= index && currentIndex !== -1,
+      current: normalize(currentStatus) === normalize(status),
       timestamp:
-        status === "pending"
+        index === 0
           ? order.createdAt
-          : currentStatus === status
+          : normalize(currentStatus) === normalize(status)
           ? order.updatedAt
           : null,
     }));
 
-    if (terminalStatuses.includes(currentStatus)) {
+    // If order is in a terminal status not present in flow (e.g., cancelled/refunded), append it
+    if (terminalStatuses.includes(normalize(currentStatus))) {
       timeline.push({
         status: currentStatus,
         completed: true,
