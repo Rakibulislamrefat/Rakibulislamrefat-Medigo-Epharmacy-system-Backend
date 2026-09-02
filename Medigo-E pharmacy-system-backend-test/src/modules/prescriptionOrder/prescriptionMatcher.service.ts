@@ -66,9 +66,9 @@ export const extractDrugName = (line: string): string => {
 
   // Remove common dosage and strength patterns like 665mg, 20 mg, 5ml, 1+0+1
   cleaned = cleaned.replace(/\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu)\b/gi, "");
-  cleaned = cleaned.replace(/\b\d+\s*[+\-]\s*\d+\s*[+\-]\s*\d+\b/g, "");
+  cleaned = cleaned.replace(/\b\d+(?:\s*tsf)?\s*[+\-]\s*\d+(?:\s*tsf)?\s*[+\-]\s*\d+(?:\s*tsf)?\b/gi, "");
   cleaned = cleaned.replace(/\b(?:od|bd|tid|qid|hs|ac|pc|stat)\b/gi, "");
-  cleaned = cleaned.replace(/\b(?:for|days|day|after|before|meal|meals|twice|thrice|once|daily|weekly)\b/gi, "");
+  cleaned = cleaned.replace(/\b(?:as advised|as directed|for|days|day|after|before|breakfast|lunch|dinner|meal|meals|twice|thrice|once|daily|weekly)\b/gi, "");
   cleaned = cleaned.replace(/\b\d+\s*(?:days?|weeks?|months?)\b/gi, "");
   cleaned = cleaned.replace(/\b(?:tab|cap|syp|inj|tablet|capsule|syrup|injection)\b/gi, "");
   cleaned = cleaned.replace(/\s+/g, " ").trim();
@@ -102,7 +102,6 @@ export const extractQuantity = (line: string): number => {
 
 export const matchMedicine = async (drugName: string) => {
   if (!drugName || !drugName.trim()) return [];
-  // Use Fuse.js backed matcher for fuzzy searches
   const results = await matchMedicineFuse(drugName);
   return results.map((r: any) => ({ _id: r._id, name: r.name, price: r.price, stock: r.stock, score: r.score }));
 };
@@ -115,7 +114,8 @@ export const autoMatchPrescription = async (prescriptionOrder: any) => {
 
   for (const line of lines) {
     const parsedName = extractDrugName(line);
-    const suggestions = parsedName ? await matchMedicine(parsedName) : [];
+    const strength = line.match(/\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu)\b/i)?.[0] || "";
+    const suggestions = parsedName ? await matchMedicine(`${parsedName} ${strength}`.trim()) : [];
     const selectedMedicineId = suggestions.length ? selectBestSuggestion(suggestions as any, 0.5) : null;
 
     items.push({
@@ -123,7 +123,7 @@ export const autoMatchPrescription = async (prescriptionOrder: any) => {
       parsedName,
       quantity: extractQuantity(line),
       suggestions,
-      selectedMedicineId: selectedMedicineId || (suggestions[0]?._id ?? null),
+      selectedMedicineId,
       manualReview: suggestions.length === 0 || !selectedMedicineId,
     });
   }

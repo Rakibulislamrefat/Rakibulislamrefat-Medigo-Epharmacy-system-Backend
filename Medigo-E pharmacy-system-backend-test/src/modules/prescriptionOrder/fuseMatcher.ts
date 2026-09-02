@@ -17,6 +17,25 @@ let cached: { fuse: Fuse<IndexableProduct>; products: IndexableProduct[] } | nul
 
 const normalize = (s?: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
+const removeStrengthAndForm = (value: string) => value
+  .replace(/\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu)\b/gi, '')
+  .replace(/\b(?:tablet|tablets|capsule|capsules|syrup|injection|sprinkle|mups|cream|drops?)\b/gi, '')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const formatProductName = (product: IndexableProduct) => {
+  const name = String(product.name || '').trim();
+  const normalizedName = normalize(name);
+  const dosageForm = product.dosageForm === 'other'
+    ? ''
+    : String(product.dosageForm || '').replace(/^\w/, (letter) => letter.toUpperCase());
+  const additions = [product.strength, dosageForm]
+    .map((value) => String(value || '').trim())
+    .filter((value) => value && !normalizedName.includes(normalize(value)));
+
+  return [name, ...additions].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+};
+
 export async function ensureCatalogLoaded() {
   if (cached) return cached;
 
@@ -37,7 +56,7 @@ export async function ensureCatalogLoaded() {
   }));
 
   const fuse = new Fuse<IndexableProduct>(indexable, {
-    keys: ['name', 'genericName', 'brandName'],
+    keys: ['name', 'genericName', 'brandName', 'strength'],
     threshold: 0.6,
     includeScore: true,
     ignoreLocation: true,
@@ -54,11 +73,21 @@ export async function matchMedicineFuse(drugName: string, limit = 6): Promise<Ar
   const loaded = await ensureCatalogLoaded();
   const fuse = loaded.fuse;
   const query = normalize(drugName);
-  const results = fuse.search(query || drugName, { limit }) as Array<{ item: IndexableProduct; score?: number }>;
+  const requestedStrength = query.match(/\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu)\b/i)?.[0];
+  const requestedStrengthValue = requestedStrength ? Number(requestedStrength.match(/[\d.]+/)?.[0]) : null;
+  const nameQuery = removeStrengthAndForm(query) || query;
+  const results = fuse.search(nameQuery, { limit: loaded.products.length }) as Array<{ item: IndexableProduct; score?: number }>;
 
-  return results.map((r: { item: IndexableProduct; score?: number }) => ({
+  return results
+    .filter((r: { item: IndexableProduct; score?: number }) => {
+      if (requestedStrengthValue === null || !r.item.strength) return true;
+      const candidateStrengthValue = Number(String(r.item.strength).match(/[\d.]+/)?.[0]);
+      return !Number.isFinite(candidateStrengthValue) || candidateStrengthValue === requestedStrengthValue;
+    })
+    .slice(0, limit)
+    .map((r: { item: IndexableProduct; score?: number }) => ({
     _id: String(r.item._id),
-    name: r.item.name,
+    name: formatProductName(r.item),
     genericName: r.item.genericName,
     brandName: r.item.brandName,
     strength: r.item.strength,
@@ -67,7 +96,7 @@ export async function matchMedicineFuse(drugName: string, limit = 6): Promise<Ar
     salePrice: r.item.salePrice ?? null,
     stock: Number(r.item.stockQty ?? 0),
     score: Number(1 - (r.score ?? 1)),
-  }));
+    }));
 }
 
 export function selectBestSuggestion(suggestions: Array<{ _id: string; score: number }>, threshold = 0.5) {

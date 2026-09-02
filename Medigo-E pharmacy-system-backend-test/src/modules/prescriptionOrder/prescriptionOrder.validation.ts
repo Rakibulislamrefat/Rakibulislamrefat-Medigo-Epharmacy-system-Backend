@@ -195,6 +195,7 @@ export const updatePrescriptionOrderSchema = z
     quantities: quantitiesSchema.optional(),
     notes: optionalUpdateString,
     status: z.enum(PRESCRIPTION_ORDER_STATUSES).optional(),
+    deliveryFee: z.coerce.number().min(0).optional(),
   })
   .strict()
   .transform((value) => {
@@ -218,6 +219,7 @@ export const updatePrescriptionOrderSchema = z
       quantities: value.quantities,
       notes: value.notes,
       status: value.status,
+      deliveryFee: value.deliveryFee,
     };
   });
 

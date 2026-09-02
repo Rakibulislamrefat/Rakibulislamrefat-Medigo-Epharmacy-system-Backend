@@ -15,8 +15,23 @@ const getUserId = (req: Request) => {
 const processPrescriptionOCR = async (prescriptionId: string, filePath: string) => {
   try {
     const extractedText = await OCRService.extractTextFromPrescription(filePath);
-    const suggestedMedicines = await OCRService.matchMedicinesFromText(extractedText);
     const autoMatched = await autoMatchPrescription({ extractedText, ocrText: extractedText });
+    const suggestedMedicines = autoMatched.items
+      .map((item: any) => {
+        const selected = item.suggestions.find((suggestion: any) =>
+          String(suggestion._id) === String(item.selectedMedicineId)
+        );
+
+        return {
+          id: selected?._id || null,
+          medicineId: selected?._id || null,
+          name: selected?.name || item.parsedName,
+          dosage: item.ocrLine,
+          quantity: item.quantity,
+          price: selected?.price || 0,
+          stockQty: selected?.stock || 0,
+        };
+      })
 
     return PrescriptionOrderService.update(prescriptionId, {
       extractedText,
@@ -218,6 +233,26 @@ export const getPrescriptionOCRDetails = asyncHandler(async (req: Request, res: 
   
   if (userRole !== "admin" && userRole !== "pharmacist" && prescription.user.userId.toString() !== userId) {
     throw new ApiError(403, "Not authorized to view this prescription");
+  }
+
+  if (prescription.status === "pending_verification" && prescription.extractedText) {
+    const refreshedMatches = await autoMatchPrescription({ extractedText: prescription.extractedText });
+    prescription.suggestedMatches = refreshedMatches.items;
+    prescription.suggestedMedicines = refreshedMatches.items.map((item: any) => {
+      const selected = item.suggestions.find((suggestion: any) =>
+        String(suggestion._id) === String(item.selectedMedicineId)
+      );
+
+      return {
+        id: selected?._id || null,
+        medicineId: selected?._id || null,
+        name: selected?.name || item.parsedName,
+        dosage: item.ocrLine,
+        quantity: item.quantity,
+        price: selected?.price || 0,
+        stockQty: selected?.stock || 0,
+      };
+    });
   }
 
   // Normalize suggestedMatches and suggestedMedicines for frontend compatibility

@@ -59,7 +59,7 @@ export const getPrescriptionOrder = asyncHandler(async (req: Request, res: Respo
  */
 export const verifyPrescription = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { medicines, verifiedMedicines, verificationNotes, pharmacistNotes } = req.body;
+  const { medicines, verifiedMedicines, verificationNotes, pharmacistNotes, deliveryFee } = req.body;
   const pharmacistId = getPharmacistId(req);
 
   const selectedMedicines = medicines ?? verifiedMedicines ?? [];
@@ -69,7 +69,8 @@ export const verifyPrescription = asyncHandler(async (req: Request, res: Respons
     id,
     pharmacistId,
     selectedMedicines,
-    notes
+    notes,
+    Number(deliveryFee || 0)
   );
 
   res.status(200).json(new ApiResponse(200, "Order verified successfully", updated));

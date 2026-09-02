@@ -122,6 +122,7 @@ const PrescriptionOrderSchema = new Schema(
       default: null,
     },
     paymentInfo: { type: Schema.Types.Mixed, default: null },
+    deliveryFee: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true },
 );

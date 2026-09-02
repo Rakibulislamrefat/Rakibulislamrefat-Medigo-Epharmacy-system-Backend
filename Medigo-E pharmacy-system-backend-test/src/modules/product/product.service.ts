@@ -52,8 +52,15 @@ const normalizeProductPayload = (payload: any = {}) => {
 
   delete normalized.image;
 
+  if (normalized.expriydate != null && normalized.expiryDate == null) {
+    normalized.expiryDate = normalized.expriydate;
+  }
+  delete normalized.expriydate;
+
   if (!normalized.slug && normalized.name) normalized.slug = slugify(normalized.name);
   if (normalized.slug) normalized.slug = slugify(normalized.slug);
+
+  if (normalized.expiryDate != null) normalized.expiryDate = String(normalized.expiryDate).trim();
 
   if ("price" in normalized) normalized.price = toNumber(normalized.price);
   if ("salePrice" in normalized) normalized.salePrice = toNumber(normalized.salePrice, null);
@@ -70,13 +77,27 @@ const normalizeProductPayload = (payload: any = {}) => {
   return normalized;
 };
 
+const hasValidExpiryWindow = (expiryDate: unknown, daysWindow = 10) => {
+  if (expiryDate == null || expiryDate === "") return false;
+
+  const expiry = new Date(String(expiryDate));
+  if (Number.isNaN(expiry.getTime())) return false;
+
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() + daysWindow);
+
+  return expiry > cutoff;
+};
+
 export class ProductService {
   static async create(payload: any) {
     payload = normalizeProductPayload(payload);
-    const { name, slug, price } = payload || {};
+    const { name, slug, price, expiryDate } = payload || {};
     if (!name) throw new ApiError(400, "name is required");
     if (!slug) throw new ApiError(400, "slug is required");
     if (typeof price !== "number") throw new ApiError(400, "price is required");
+    if (!expiryDate || !String(expiryDate).trim()) throw new ApiError(400, "expiryDate is required");
     const created = await Product.create(payload);
     return created;
   }
@@ -170,46 +191,49 @@ export class ProductService {
   static async getMedicinesByCategory(query: any = {}) {
     const pipeline: any[] = [];
 
-    // 1. Initial Match: Filter products that contain AT LEAST ONE of the requested categories
     if (query?.categories) {
-      const categoriesArray = Array.isArray(query.categories) 
-        ? query.categories 
+      const categoriesArray = Array.isArray(query.categories)
+        ? query.categories
         : query.categories.split(',').map((c: string) => c.trim());
       pipeline.push({ $match: { categories: { $in: categoriesArray } } });
     }
 
-    // 2. Unwind the categories array so each product becomes multiple documents, one per category
     pipeline.push({ $unwind: "$categories" });
 
-    // 3. Second Match: Filter again to remove the unwound categories that weren't requested
     if (query?.categories) {
-      const categoriesArray = Array.isArray(query.categories) 
-        ? query.categories 
+      const categoriesArray = Array.isArray(query.categories)
+        ? query.categories
         : query.categories.split(',').map((c: string) => c.trim());
       pipeline.push({ $match: { categories: { $in: categoriesArray } } });
     }
 
-    // 4. Group by category and push the original document
     pipeline.push({
       $group: {
         _id: "$categories",
-        medicines: { $push: "$$ROOT" }
-      }
+        medicines: { $push: "$$ROOT" },
+      },
     });
 
-    // 5. Format output and sort
     pipeline.push(
       {
         $project: {
           category: "$_id",
           medicines: 1,
-          _id: 0
-        }
+          _id: 0,
+        },
       },
-      { $sort: { category: 1 } }
+      { $sort: { category: 1 } },
     );
 
     const result = await Product.aggregate(pipeline);
-    return result;
+
+    return result
+      .map((group: any) => ({
+        ...group,
+        medicines: (group.medicines || []).filter((medicine: any) =>
+          hasValidExpiryWindow(medicine?.expiryDate, 10),
+        ),
+      }))
+      .filter((group: any) => Array.isArray(group.medicines) && group.medicines.length > 0);
   }
 }

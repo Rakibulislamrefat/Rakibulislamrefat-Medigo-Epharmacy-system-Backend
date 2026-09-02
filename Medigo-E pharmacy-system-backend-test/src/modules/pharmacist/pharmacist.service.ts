@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import PrescriptionOrder from "../prescriptionOrder/prescriptionOrder.schema";
 import Order from "../order/Order.schema";
 import Product from "../product/Product.schema";
+import { autoMatchPrescription } from "../prescriptionOrder/prescriptionMatcher.service";
 import { ApiError, paginate, sendEmail } from "../../shared/utils";
 import fs from "fs";
 import path from "path";
@@ -32,7 +33,7 @@ export const formatPrescriptionOrderForPharmacist = (prescription: any) => {
           const name = String(medicine?.name || '').trim();
           const lowerName = name.toLowerCase();
 
-          if (!medicine.id || !name || name.length < 2) return false;
+          if (!name || name.length < 2) return false;
           if (
             lowerName.includes('document') ||
             lowerName.includes('fictitious') ||
@@ -166,6 +167,8 @@ export const buildFulfillmentOrderData = async (prescription: any, medicines: an
     },
     totalAmount,
     subtotal: totalAmount,
+    deliveryFee: 0,
+    discount: 0,
     grandTotal: totalAmount,
     notes: notes || "",
     prescriptionRequired: true,
@@ -288,6 +291,27 @@ export class PharmacistService {
         throw new ApiError(404, "Prescription not found");
       }
 
+      if (prescription.status === "pending_verification" && prescription.extractedText) {
+        const refreshedMatches = await autoMatchPrescription({ extractedText: prescription.extractedText });
+        prescription.suggestedMatches = refreshedMatches.items;
+        prescription.suggestedMedicines = refreshedMatches.items
+          .map((item: any) => {
+            const selected = item.suggestions.find((suggestion: any) =>
+              String(suggestion._id) === String(item.selectedMedicineId)
+            );
+
+            return {
+              id: selected?._id || null,
+              medicineId: selected?._id || null,
+              name: selected?.name || item.parsedName,
+              dosage: item.ocrLine,
+              quantity: item.quantity,
+              price: selected?.price || 0,
+              stockQty: selected?.stock || 0,
+            };
+          })
+      }
+
       const suggestedIds = Array.isArray(prescription.suggestedMedicines)
         ? prescription.suggestedMedicines
             .map((medicine: any) => medicine?.id || medicine?._id || medicine?.medicineId)
@@ -353,7 +377,8 @@ export class PharmacistService {
     prescriptionId: string,
     pharmacistId: string,
     medicines: any[],
-    verificationNotes?: string
+    verificationNotes?: string,
+    deliveryFee = 0
   ) {
     try {
       if (!mongoose.Types.ObjectId.isValid(prescriptionId)) {
@@ -385,6 +410,7 @@ export class PharmacistService {
           verifiedAt: new Date(),
           verificationNotes: verificationNotes || "",
           pharmacistNotes: verificationNotes || "",
+          deliveryFee: Math.max(Number(deliveryFee) || 0, 0),
         },
         { new: true }
       )
@@ -396,10 +422,26 @@ export class PharmacistService {
       }
 
       const prescriptionIdValue = (updatedPrescription as any)?._id ?? prescriptionId;
-      const existingFulfillmentOrder = await Order.findOne({ prescriptionOrderId: prescriptionIdValue }).lean();
+      const existingFulfillmentOrder: any = await Order.findOne({ prescriptionOrderId: prescriptionIdValue }).lean();
+      const normalizedDeliveryFee = Math.max(Number(deliveryFee) || 0, 0);
+      const fulfillmentData = await buildFulfillmentOrderData(updatedPrescription, medicines, verificationNotes || "");
       const fulfillmentOrder = existingFulfillmentOrder
-        ? existingFulfillmentOrder
-        : await Order.create(await buildFulfillmentOrderData(updatedPrescription, medicines, verificationNotes || ""));
+        ? await Order.findByIdAndUpdate(
+            existingFulfillmentOrder._id,
+            {
+              $set: {
+                deliveryFee: normalizedDeliveryFee,
+                discount: 0,
+                grandTotal: Number(existingFulfillmentOrder.subtotal || 0) + normalizedDeliveryFee,
+              },
+            },
+            { new: true }
+          ).lean()
+        : await Order.create({
+            ...fulfillmentData,
+            deliveryFee: normalizedDeliveryFee,
+            grandTotal: Number(fulfillmentData.subtotal || 0) + normalizedDeliveryFee,
+          });
 
       const responsePayload = {
         ...formatPrescriptionOrderForPharmacist(updatedPrescription),

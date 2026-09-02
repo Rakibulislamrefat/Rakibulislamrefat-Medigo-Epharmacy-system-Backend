@@ -19,6 +19,7 @@ export const verifyPrescriptionSchema = z
     verifiedMedicines: z.array(medicineSchema).optional(),
     verificationNotes: z.string().optional(),
     pharmacistNotes: z.string().optional(),
+    deliveryFee: z.coerce.number().min(0).optional(),
   })
   .refine(
     (data) => {

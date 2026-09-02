@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Product from "../product/Product.schema";
 import User from "../user/User.schema";
 import PaymentTransaction from "../paymentTransaction/PaymentTransaction.schema";
+import Order from "../order/Order.schema";
 import PrescriptionOrder from "./prescriptionOrder.schema";
 import { ApiError, paginate } from "../../shared/utils";
 
@@ -22,6 +23,7 @@ const PRESCRIPTION_ORDER_FIELDS = [
   "verificationNotes",
   "pharmacistNotes",
   "paymentInfo",
+  "deliveryFee",
 ];
 
 const isValidId = (id: string) => mongoose.Types.ObjectId.isValid(id);
@@ -79,7 +81,7 @@ export const calculatePrescriptionOrderAmount = (order: any) =>
     const unitPrice = Number(medicine.salePrice ?? medicine.price ?? 0);
     const quantity = Math.max(Number(medicine.quantity || 1), 1);
     return total + unitPrice * quantity;
-  }, 0);
+  }, 0) + Math.max(Number(order?.deliveryFee || 0), 0);
 
 const generateCodReference = (orderId: string) => {
   const now = new Date();
@@ -191,6 +193,7 @@ export class PrescriptionOrderService {
 
     const doc = await populatePrescriptionOrder(PrescriptionOrder.findOne({ _id: id, "user.userId": userId }));
     if (!doc) throw new ApiError(404, "Prescription order not found");
+
     return doc;
   }
 
@@ -215,6 +218,17 @@ export class PrescriptionOrderService {
     );
 
     if (!doc) throw new ApiError(404, "Prescription order not found");
+
+    if (normalized.status === "confirmed") {
+      const deliveryFee = Math.max(Number(doc.deliveryFee || 0), 0);
+      const subtotal = calculatePrescriptionOrderAmount({ ...doc, deliveryFee: 0 });
+      await Order.findOneAndUpdate(
+        { prescriptionOrderId: doc._id },
+        { $set: { deliveryFee, subtotal, grandTotal: subtotal + deliveryFee } },
+        { new: true }
+      );
+    }
+
     return doc;
   }
 

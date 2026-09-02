@@ -97,6 +97,7 @@ const EMedicineSchema = new Schema(
     salePrice: { type: Number, default: null, min: 0 },
     currency: { type: String, default: "BDT" },
     stockQty: { type: Number, default: 0, min: 0 },
+    expiryDate: { type: String, required: true, trim: true },
     status: { type: String, enum: ["active", "inactive"], default: "active", index: true },
   },
   { timestamps: true },

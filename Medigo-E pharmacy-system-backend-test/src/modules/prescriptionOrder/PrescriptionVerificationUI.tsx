@@ -43,6 +43,7 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
   const [prescription, setPrescription] = useState<Prescription | null>(null);
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [verificationNotes, setVerificationNotes] = useState('');
+  const [deliveryFee, setDeliveryFee] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -71,17 +72,18 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
 
       const mappedMedicines = baseMedicines.map((item: any, index: number) => {
         const match = matches[index] || null;
-        const rawName = sanitizeName(item.name || match?.parsedName || '');
         const suggested = (match?.suggestions && match.suggestions.length > 0) ? match.suggestions : (item.suggestions || []);
-        const topSuggestion = suggested?.[0];
+        const selected = suggested?.find((suggestion: MedicineSuggestion) =>
+          String(suggestion._id) === String(match?.selectedMedicineId || item.medicineId || item.id)
+        );
 
         return {
           ...item,
-          medicineId: match?.selectedMedicineId || topSuggestion?._id || item.medicineId || item.id || '',
-          name: rawName || topSuggestion?.name || match?.parsedName || item.name || '',
+          medicineId: match?.selectedMedicineId || item.medicineId || item.id || '',
+          name: sanitizeName(selected?.name || item.name || match?.parsedName || ''),
           dosage: item.dosage || '',
           quantity: Number(item.quantity || 1),
-          price: Number(item.price ?? topSuggestion?.price ?? item.salePrice ?? 0),
+          price: Number(selected?.price ?? item.price ?? item.salePrice ?? 0),
           suggestions: suggested || [],
           manualReview: Boolean(match?.manualReview),
           ocrLine: match?.ocrLine || '',
@@ -133,8 +135,8 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
       return sum + unit * qty;
     }, 0);
 
-    setPricing({ subtotal, deliveryFee: 0, discount: 0, finalTotal: subtotal });
-  }, [medicines]);
+    setPricing({ subtotal, deliveryFee, discount: 0, finalTotal: subtotal + deliveryFee });
+  }, [medicines, deliveryFee]);
 
   const handleVerify = async () => {
     if (medicines.length === 0) {
@@ -151,6 +153,7 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
         medicines,
         status,
         verificationNotes,
+        deliveryFee,
       });
 
       setPricing(data.data?.pricing || null);
@@ -158,6 +161,7 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
       setPrescription(null);
       setMedicines([]);
       setVerificationNotes('');
+      setDeliveryFee(0);
       setStatus('verified');
       setPrescriptionId('');
 
@@ -470,6 +474,16 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
           border: '1px solid #b8d8ff'
         }}>
           <h3 style={{ marginTop: 0 }}>Calculated Pricing</h3>
+          <label style={{ display: 'block', marginBottom: '8px' }}>
+            <strong>Delivery Fee (BDT):</strong>
+            <input
+              type="number"
+              min="0"
+              value={deliveryFee}
+              onChange={(e) => setDeliveryFee(Math.max(Number(e.target.value || 0), 0))}
+              style={{ marginLeft: '8px', padding: '5px', border: '1px solid #ddd', borderRadius: '4px', width: '100px' }}
+            />
+          </label>
           <p style={{ margin: '4px 0' }}><strong>Subtotal:</strong> BDT {pricing.subtotal}</p>
           <p style={{ margin: '4px 0' }}><strong>Delivery Fee:</strong> BDT {pricing.deliveryFee}</p>
           <p style={{ margin: '4px 0' }}><strong>Discount:</strong> BDT {pricing.discount}</p>
