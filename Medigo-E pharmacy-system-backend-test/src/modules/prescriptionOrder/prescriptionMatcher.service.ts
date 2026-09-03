@@ -64,6 +64,11 @@ export const extractDrugName = (line: string): string => {
 
   let cleaned = stripCommonPrefixes(line);
 
+  const strengthIndex = cleaned.search(/\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu)\b/i);
+  if (strengthIndex > 0) {
+    cleaned = cleaned.slice(0, strengthIndex);
+  }
+
   // Remove common dosage and strength patterns like 665mg, 20 mg, 5ml, 1+0+1
   cleaned = cleaned.replace(/\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu)\b/gi, "");
   cleaned = cleaned.replace(/\b\d+(?:\s*tsf)?\s*[+\-]\s*\d+(?:\s*tsf)?\s*[+\-]\s*\d+(?:\s*tsf)?\b/gi, "");

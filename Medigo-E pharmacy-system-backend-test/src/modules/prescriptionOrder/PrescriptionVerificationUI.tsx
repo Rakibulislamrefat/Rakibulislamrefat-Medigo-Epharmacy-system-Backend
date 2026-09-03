@@ -52,8 +52,19 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
 
   const sanitizeName = (value?: string) => {
     if (!value) return '';
-    return String(value).replace(/^[^a-zA-Z0-9]+/, '').trim();
+    const text = String(value)
+      .replace(/\\([()[\]{}])/g, '$1')
+      .replace(/[()[\]{}]/g, '')
+      .replace(/\s*(?:~{1,}|\b(?:as needed|after|before|morning|at night|daily)\b).*$/i, '');
+    const name = text;
+    return name.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9. -]+$/g, '').trim();
   };
+
+  const sanitizeOcrText = (value?: string) => String(value || '')
+    .replace(/\\([()[\]{}])/g, '$1')
+    .replace(/[~`]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   useEffect(() => {
     if (initialId) {
       loadPrescription(initialId);
@@ -300,7 +311,7 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
           <strong>OCR Extracted Text:</strong>
           <textarea
             readOnly
-            value={prescription.extractedText}
+            value={sanitizeOcrText(prescription.extractedText)}
             rows={5}
             style={{
               width: '100%',
@@ -365,7 +376,7 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
                   <td style={{ padding: '10px', borderRight: '1px solid #ddd' }}>
                     <input
                       type="text"
-                      value={medicine.dosage}
+                      value={sanitizeOcrText(medicine.dosage)}
                       onChange={(e) => handleUpdateMedicine(idx, 'dosage', e.target.value)}
                       style={{
                         width: '100%',
@@ -419,7 +430,7 @@ function PrescriptionVerificationUI({ prescriptionId: initialId }: VerificationU
                         >
                           {medicine.suggestions.map((suggestion) => (
                             <option key={suggestion._id} value={suggestion._id}>
-                              {suggestion.name} · BDT {suggestion.price} · stock {suggestion.stock}
+                              {sanitizeName(suggestion.name)} · BDT {suggestion.price} · stock {suggestion.stock}
                             </option>
                           ))}
                         </select>
